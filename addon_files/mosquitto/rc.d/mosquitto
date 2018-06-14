@@ -1,0 +1,65 @@
+#!/bin/sh
+
+CONF_DIR=/usr/local/etc/config
+ADDON_DIR=/usr/local/addons/mosquitto
+
+BIN_DIR=/usr/local/bin
+LIB_DIR=/usr/local/lib
+CONF_DIR=/usr/local/etc/config
+
+Stop () {
+    echo "Stopping Mosquitto"
+    start-stop-daemon -K -q -p /var/run/mosquitto.pid
+}
+
+Start () {
+    echo "Starting Mosquitto: "
+    start-stop-daemon -S -b -m -p /var/run/mosquitto.pid --exec $ADDON_DIR/bin/mosquitto -- -c $ADDON_DIR/etc/mosquitto.conf
+}
+
+case "$1" in
+
+  stop)
+    Stop
+  ;;
+
+  start)
+    Start
+  ;;
+
+  restart)
+    Stop
+    sleep 1
+    Start
+  ;;
+
+  info)
+    echo "Info: <center><a href=\"https://mosquitto.org/\" target=\"_blank\"><img width=\"240\" src="/addons/mosquitto/mosquitto-text-side-28.png"></a></center>"
+    echo "Name: Mosquitto"
+    echo "Version: 1.4.15+0"
+    echo "Operations: restart uninstall"
+  ;;
+
+  uninstall)
+     Stop
+     rm $CONF_DIR/rc.d/mosquitto
+     rm $BIN_DIR/mosquitto*
+     rm $LIB_DIR/libmosquitto*
+     rm $CONF_DIR/addons/www/mosquitto
+     rm -r $ADDON_DIR
+
+     # Delete libs only if broken links
+     find -L /usr/local/lib/libssl.so* -type l -delete
+     find -L /usr/local/lib/libwebsockets.so* -type l -delete
+  ;;
+
+  *)
+    echo "Usage: mosquitto {start|stop|restart|info|uninstall}" >&2
+    exit 1
+  ;;
+
+esac
+
+
+
+exit 0

@@ -1,0 +1,6 @@
+addon_tmp
+dist
+.idea
+.DS_Store
+live
+CHANGELOG.md
