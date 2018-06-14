@@ -29,7 +29,7 @@ case "$1" in
 
   restart)
     Stop
-    sleep 1
+    sleep 3
     Start
   ;;
 
