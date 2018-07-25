@@ -47,7 +47,8 @@ case "$1" in
   info)
     echo "Info: <center><a href=\"https://mosquitto.org/\" target=\"_blank\"><img width=\"240\" src="/addons/mosquitto/mosquitto-text-side-28.png"></a></center>"
     echo "Name: Mosquitto"
-    echo "Version: 1.4.15+2"
+    echo "Version: 1.4.15+3"
+    echo "Update: /addons/mosquitto/update_check.cgi"
     echo "Operations: uninstall"
   ;;
 

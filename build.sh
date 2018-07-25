@@ -13,7 +13,7 @@ cp -r $ADDON_FILES/* $ADDON_TMP/
 cd $BUILD_DIR
 
 
-ADDON_FILE=mosquitto-1.4.15+2.tar.gz
+ADDON_FILE=mosquitto-1.4.15+3.tar.gz
 echo "compressing addon package $ADDON_FILE ..."
 
 mkdir $BUILD_DIR/dist 2> /dev/null
