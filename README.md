@@ -20,7 +20,8 @@ Falls eigene Konfigurationen vorgenommen werden sollten diese nicht in den vorha
 Per default lauscht Mosquitto auf den Ports 1883/mqtt und 1884/wss. Falls auf der CCU ein Zertifikat vorhanden ist 
 werden automatisch auch TLS listener geöffnet (8883/mqtts und 8884/wss).
 
-Das Addon installiert außer dem Broker auch die Kommandozeilenwerkzeuge `mosquitto_pub` und `mosquitto_sub`.
+Das Addon installiert außer dem Broker auch die Kommandozeilenwerkzeuge `mosquitto_pub` und `mosquitto_sub` und verlinkt
+diese nach `/usr/local/bin/`.
 
 
 ## Credits
