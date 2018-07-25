@@ -53,7 +53,8 @@ case "$1" in
   ;;
 
   uninstall)
-     Stop
+     /usr/bin/killall mosquitto
+     rm /var/run/mosquitto.pid
      rm $CONF_DIR/rc.d/mosquitto
      rm $BIN_DIR/mosquitto*
      rm $LIB_DIR/libmosquitto*
