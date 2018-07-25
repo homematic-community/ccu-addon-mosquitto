@@ -49,7 +49,7 @@ case "$1" in
     echo "Name: Mosquitto"
     echo "Version: 1.4.15+5"
     echo "Update: /addons/mosquitto/update_check.cgi"
-    echo "Operations: uninstall"
+    echo "Operations: uninstall restart"
   ;;
 
   uninstall)
