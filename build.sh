@@ -13,12 +13,21 @@ cp -r $ADDON_FILES/* $ADDON_TMP/
 cd $BUILD_DIR
 
 
-ADDON_FILE=mosquitto-1.4.15+1.tar.gz
+ADDON_FILE=mosquitto-1.4.15+2.tar.gz
 echo "compressing addon package $ADDON_FILE ..."
 
 mkdir $BUILD_DIR/dist 2> /dev/null
 cd $ADDON_TMP
-tar --exclude=.DS_Store -czf $BUILD_DIR/dist/$ADDON_FILE *
+cd $ADDON_TMP
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    if [[ -f /usr/local/bin/gtar ]]; then
+        gtar --exclude=.DS_Store --owner=root --group=root -czf $BUILD_DIR/dist/$ADDON_FILE *
+    else
+        tar --exclude=.DS_Store -czf $BUILD_DIR/dist/$ADDON_FILE *
+    fi
+else
+    tar --owner=root --group=root -czf $BUILD_DIR/dist/$ADDON_FILE *
+fi
 cd $BUILD_DIR
 
 echo "done."
