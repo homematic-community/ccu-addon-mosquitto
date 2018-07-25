@@ -28,6 +28,16 @@ ln -sf $MSQ_DIR/bin/* /usr/local/bin/
 ln -sf $MSQ_DIR/rc.d/mosquitto $CONF_DIR/rc.d/mosquitto
 ln -sf $MSQ_DIR/www $CONF_DIR/addons/www/mosquitto
 
+# Migration
+
+if [ -f $MSQ_DIR/etc/conf.d/mqtt-listener.conf ]; then
+    rm $MSQ_DIR/etc/conf.d/mqtt-listener.conf
+fi
+
+if [ -f $MSQ_DIR/etc/conf.d/tls-listener.conf ]; then
+    rm $MSQ_DIR/etc/conf.d/tls-listener.conf
+fi
+
 sync
 
 exit 0

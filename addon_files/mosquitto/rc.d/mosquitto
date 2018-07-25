@@ -8,13 +8,24 @@ LIB_DIR=/usr/local/lib
 CONF_DIR=/usr/local/etc/config
 
 Stop () {
-    echo "Stopping Mosquitto"
-    start-stop-daemon -K -q -p /var/run/mosquitto.pid
+    echo -n "Stopping Mosquitto: "
+    start-stop-daemon -K -q -p /var/run/mosquitto.pid && echo "OK"
 }
 
 Start () {
-    echo "Starting Mosquitto: "
-    start-stop-daemon -S -b -m -p /var/run/mosquitto.pid --exec $ADDON_DIR/bin/mosquitto -- -c $ADDON_DIR/etc/mosquitto.conf
+    echo -n "Starting Mosquitto: "
+    if [ -f /etc/config/server.pem ]; then
+        if [ -f $ADDON_DIR/etc/conf.d/listener-mqtts.conf.disabled ]; then
+            mv $ADDON_DIR/etc/conf.d/listener-mqtts.conf.disabled $ADDON_DIR/etc/conf.d/listener-mqtts.conf
+            mv $ADDON_DIR/etc/conf.d/listener-wss.conf.disabled $ADDON_DIR/etc/conf.d/listener-wss.conf
+        fi
+    else
+        if [ -f $ADDON_DIR/etc/conf.d/listener-mqtts.conf ]; then
+            mv $ADDON_DIR/etc/conf.d/listener-mqtts.conf $ADDON_DIR/etc/conf.d/listener-mqtts.conf.disabled
+            mv $ADDON_DIR/etc/conf.d/listener-wss.conf $ADDON_DIR/etc/conf.d/listener-wss.conf.disabled
+        fi
+    fi
+    start-stop-daemon -S -b -m -p /var/run/mosquitto.pid --exec $ADDON_DIR/bin/mosquitto -- -c $ADDON_DIR/etc/mosquitto.conf && echo "OK"
 }
 
 case "$1" in
@@ -36,8 +47,8 @@ case "$1" in
   info)
     echo "Info: <center><a href=\"https://mosquitto.org/\" target=\"_blank\"><img width=\"240\" src="/addons/mosquitto/mosquitto-text-side-28.png"></a></center>"
     echo "Name: Mosquitto"
-    echo "Version: 1.4.15+0"
-    echo "Operations: restart uninstall"
+    echo "Version: 1.4.15+2"
+    echo "Operations: uninstall"
   ;;
 
   uninstall)
