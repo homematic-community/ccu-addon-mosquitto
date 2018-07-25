@@ -1,6 +1,7 @@
 # ccu-addon-mosquitto
 
-[![Github Releases](https://img.shields.io/github/downloads/hobbyquaker/ccu-addon-mosquitto/latest/total.svg)](https://github.com/hobbyquaker/ccu-addon-mosquitto/releases)
+[![Current Release](https://img.shields.io/github/release/hobbyquaker/ccu-addon-mosquitto.svg?colorB=4cc61e)](https://github.com/hobbyquaker/ccu-addon-mosquitto/releases/latest)
+[![Github Releases](https://img.shields.io/github/downloads/hobbyquaker/ccu-addon-mosquitto/total.svg)](https://github.com/hobbyquaker/ccu-addon-mosquitto/releases)
 
 [Mosquitto](https://mosquitto.org/) als Addon für die
 [Homematic CCU3](https://www.eq-3.de/produkte/homematic/zentralen-und-gateways/smart-home-zentrale-ccu3.html) und 
