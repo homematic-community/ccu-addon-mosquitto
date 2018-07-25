@@ -34,8 +34,8 @@ if [ -f $MSQ_DIR/etc/conf.d/mqtt-listener.conf ]; then
     rm $MSQ_DIR/etc/conf.d/mqtt-listener.conf
 fi
 
-if [ -f $MSQ_DIR/etc/conf.d/tls-listener.conf ]; then
-    rm $MSQ_DIR/etc/conf.d/tls-listener.conf
+if [ -f $MSQ_DIR/etc/conf.d/ws-listener.conf ]; then
+    rm $MSQ_DIR/etc/conf.d/ws-listener.conf
 fi
 
 sync
