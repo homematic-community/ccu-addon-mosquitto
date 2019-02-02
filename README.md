@@ -23,6 +23,8 @@ werden automatisch auch TLS listener geöffnet (8883/mqtts und 8884/wss).
 Das Addon installiert außer dem Broker auch die Kommandozeilenwerkzeuge `mosquitto_pub` und `mosquitto_sub` und verlinkt
 diese nach `/usr/local/bin/`.
 
+Bei Aufrufen von mosquitto_pub via CUxD Exec muss dem Aufruf das setzen des lib Pfades vorangestellt werden, z.B.: `LD_LIBRARY_PATH=/usr/local/lib /usr/local/bin/mosquitto_pub -t 'test' -m 'test'`
+
 
 ## Credits
 
