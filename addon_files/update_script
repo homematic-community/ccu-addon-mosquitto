@@ -60,6 +60,6 @@ fi
 
 sync
 
-/etc/config/rc.d/mosquitto start
+/etc/config/rc.d/mosquitto restart
 
 exit 0
