@@ -14,8 +14,6 @@ if [ $? -eq 1 ]; then
 fi
 
 mkdir -p $ADDONS_DIR && chmod 755 $ADDONS_DIR 
-mkdir -p $BIN_DIR && chmod 755 $BIN_DIR
-mkdir -p $LIB_DIR && chmod 755 $LIB_DIR
 
 if [ -f $CONF_DIR/rc.d/mosquitto ]; then
     $CONF_DIR/rc.d/mosquitto stop
@@ -23,8 +21,6 @@ fi
 
 cp -af mosquitto $ADDONS_DIR/
 
-ln -s $MSQ_DIR/lib/* /usr/local/lib/
-ln -sf $MSQ_DIR/bin/* /usr/local/bin/
 ln -sf $MSQ_DIR/rc.d/mosquitto $CONF_DIR/rc.d/mosquitto
 ln -sf $MSQ_DIR/www $CONF_DIR/addons/www/mosquitto
 
@@ -36,6 +32,30 @@ fi
 
 if [ -f $MSQ_DIR/etc/conf.d/ws-listener.conf ]; then
     rm $MSQ_DIR/etc/conf.d/ws-listener.conf
+fi
+
+if [ -f $LIB_DIR/libcrypto.so.1.1 ]; then
+    rm $LIB_DIR/libcrypto.so.1.1
+fi
+
+if [ -f $LIB_DIR/libev.so ]; then
+    rm $LIB_DIR/libev.so*
+fi
+
+if [ -f $LIB_DIR/libmosquitto.so ]; then
+    rm $LIB_DIR/libmosquitto*
+fi
+
+if [ -f $LIB_DIR/libssl.so.1.1 ]; then
+    rm $LIB_DIR/libssl.so.1.1
+fi
+
+if [ -f $LIB_DIR/libwebsockets.so ]; then
+    rm $LIB_DIR/libwebsockets.so*
+fi
+
+if [ -f $BIN_DIR/mosquitto ]; then
+    rm $BIN_DIR/mosquitto*
 fi
 
 sync

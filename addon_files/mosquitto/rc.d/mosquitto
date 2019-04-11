@@ -3,9 +3,7 @@
 CONF_DIR=/usr/local/etc/config
 ADDON_DIR=/usr/local/addons/mosquitto
 
-BIN_DIR=/usr/local/bin
-LIB_DIR=/usr/local/lib
-CONF_DIR=/usr/local/etc/config
+BIN_DIR=$ADDON_DIR/bin
 
 Stop () {
     echo -n "Stopping Mosquitto: "
@@ -25,6 +23,7 @@ Start () {
             mv $ADDON_DIR/etc/conf.d/listener-wss.conf $ADDON_DIR/etc/conf.d/listener-wss.conf.disabled
         fi
     fi
+    export LD_LIBRARY_PATH=$ADDON_DIR/lib
     start-stop-daemon -S -b -m -p /var/run/mosquitto.pid --exec $ADDON_DIR/bin/mosquitto -- -c $ADDON_DIR/etc/mosquitto.conf && echo "OK"
 }
 
@@ -47,7 +46,7 @@ case "$1" in
   info)
     echo "Info: <center><a href=\"https://mosquitto.org/\" target=\"_blank\"><img width=\"240\" src="/addons/mosquitto/mosquitto-text-side-28.png"></a></center>"
     echo "Name: Mosquitto"
-    echo "Version: 1.5.8+1"
+    echo "Version: 1.5.8+2"
     echo "Update: /addons/mosquitto/update_check.cgi"
     echo "Operations: uninstall restart"
   ;;
@@ -57,13 +56,16 @@ case "$1" in
      rm /var/run/mosquitto.pid
      rm $CONF_DIR/rc.d/mosquitto
      rm $BIN_DIR/mosquitto*
-     rm $LIB_DIR/libmosquitto*
      rm $CONF_DIR/addons/www/mosquitto
      rm -r $ADDON_DIR
 
      # Delete libs only if broken links
+     find -L /usr/local/lib/libcrypto.so* -type l -delete
+     find -L /usr/local/lib/libev.so* -type l -delete
      find -L /usr/local/lib/libssl.so* -type l -delete
      find -L /usr/local/lib/libwebsockets.so* -type l -delete
+     find -L /usr/local/lib/libmosquitto.so* -type l -delete
+     find -L /usr/local/lib/libmosquittopp.so* -type l -delete
   ;;
 
   *)
