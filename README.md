@@ -11,6 +11,8 @@ Unter [Releases](https://github.com/hobbyquaker/ccu-addon-mosquitto/releases) st
 `mosquitto-<version>.tar.gz` zum Download zur Verfügung, diese kann über das CCU WebUI als Zusatzsoftware installiert
 werden.
 
+Auf der CCU3 sind anschließend noch die notwendigen Ports freizugeben. Die Freigabe erfolgt unter Einstellungen > Systemsteuerung > Firewall konfigurieren. Dort trägt man im Feld "Port-Freigabe" z.B. "1883;1884" ein. 
+
 Die Mosquitto Konfiguration ist unter `/usr/local/addons/mosquitto/etc/conf.d/*.conf` zu finden.
 Neustart via `/etc/config/rc.d/mosquitto restart`.
 
