@@ -2,8 +2,12 @@
 
 CONF_DIR=/usr/local/etc/config
 ADDON_DIR=/usr/local/addons/mosquitto
-
 BIN_DIR=$ADDON_DIR/bin
+
+# check for unsupported platforms
+if grep -qim1 busmatic /www/api/methods/ccu/downloadFirmware.tcl; then
+  exit 13
+fi
 
 Stop () {
     echo -n "Stopping Mosquitto: "
@@ -46,7 +50,7 @@ case "$1" in
   info)
     echo "Info: <center><a href=\"https://mosquitto.org/\" target=\"_blank\"><img width=\"240\" src="/addons/mosquitto/mosquitto-text-side-28.png"></a></center>"
     echo "Name: Mosquitto"
-    echo "Version: 1.5.8+2"
+    echo "Version: 1.5.8+3"
     echo "Update: /addons/mosquitto/update_check.cgi"
     echo "Operations: uninstall restart"
   ;;

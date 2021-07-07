@@ -1,7 +1,7 @@
 #!/usr/bin/env tclsh
 
-set checkURL    "https://api.github.com/repos/hobbyquaker/ccu-addon-mosquitto/releases/latest"
-set downloadURL "https://github.com/hobbyquaker/ccu-addon-mosquitto/releases/latest"
+set checkURL    "https://api.github.com/repos/homematic-community/ccu-addon-mosquitto/releases/latest"
+set downloadURL "https://github.com/homematic-community/ccu-addon-mosquitto/releases/latest"
 
 catch {
   set input $env(QUERY_STRING)

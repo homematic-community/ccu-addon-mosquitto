@@ -2,11 +2,14 @@
 
 ADDONS_DIR=/usr/local/addons
 MSQ_DIR=$ADDONS_DIR/mosquitto
-
-
 BIN_DIR=/usr/local/bin
 LIB_DIR=/usr/local/lib
 CONF_DIR=/usr/local/etc/config
+
+# check for unsupported platforms
+if grep -qim1 busmatic /www/api/methods/ccu/downloadFirmware.tcl; then
+  exit 13
+fi
 
 mount | grep /usr/local 2>&1 >/dev/null
 if [ $? -eq 1 ]; then
