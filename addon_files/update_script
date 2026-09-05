@@ -73,6 +73,15 @@ if [ -d $ADDON_DIR/etc/conf.d ]; then
             cat "$f"
         done
         echo ""
+        # Mosquitto 2.x refuses anonymous clients unless allow_anonymous is
+        # set; 1.5.8 allowed them. Keep the old behaviour when the old
+        # configuration had no authentication at all.
+        if ! grep -qs '^[[:space:]]*allow_anonymous' $OLD $ADDON_DIR/etc/conf.d/*.conf \
+            && ! grep -qs '^[[:space:]]*password_file' $OLD $ADDON_DIR/etc/conf.d/*.conf; then
+            echo "# Mosquitto 2.x refuses anonymous clients by default, 1.5.8 allowed them"
+            echo "allow_anonymous true"
+            echo ""
+        fi
     } > $NEW
     mv $NEW $OLD
     mv $ADDON_DIR/etc/conf.d $ADDON_DIR/etc/conf.d.old
