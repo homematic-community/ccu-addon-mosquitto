@@ -60,7 +60,9 @@ Unter _Einstellungen > Systemsteuerung > Zusatzsoftware > Mosquitto_ (Schaltflä
   Benutzerverwaltung (`etc/passwd`, Plugin `mosquitto_password_file`), ACL-Datei ein/aus
   (`etc/acl`, wird auf der Kommandozeile gepflegt).
 * **Logging** – Log-Typen, Verbindungsmeldungen.
-* **Persistenz** – ein/aus, Speicherintervall.
+* **Persistenz** – ein/aus, Speicherort (Addon-Verzeichnis, ein von der CCU eingehängter
+  USB-Stick unter `/media/usb…` zur Schonung der SD-Karte, oder ein eigener Pfad; die Seite
+  zeigt, ob der Ort eingehängt und beschreibbar ist), Speicherintervall.
 * **Debug** – Log-Download (Versionen, Konfiguration, Speicher, Sockets, Firewall, Syslog).
 
 Nach Änderungen zeigt die Seite eine Schaltfläche für den nötigen Neustart. Änderungen an Passwort-

@@ -16,7 +16,8 @@ three lab systems** (CCU3 firmware armv7l incl. the migration from the
 real 1.5.8+4 release, OpenCCU x86_64, OpenCCU aarch64) — Mosquitto 2.1.2
 built from source in Alpine containers, self-contained musl runtime,
 configuration page with listeners, TLS certificate, authentication with
-user management, bridges, CCU firewall status, logging, persistence,
+user management, bridges, CCU firewall status, logging, persistence
+(also on a USB stick),
 process control, self-update; CI, e2e and parser tests, automatic
 releases. `master` is at `2.1.2+0`, **nothing has been pushed, tagged or
 released yet** — that is task 10, the maintainer's call.
@@ -37,6 +38,7 @@ released yet** — that is task 10, the maintainer's call.
 - 12. TLS listeners in the default configuration ✅ [archived](roadmap-archive/task-12.md)
 - 13. CCU firewall: show blocked ports, open them from the UI ✅ [archived](roadmap-archive/task-13.md)
 - [14. Follow-ups and ideas](#14-follow-ups-and-ideas)
+- 15. Persistence on a USB stick, configurable in the UI ✅ [archived](roadmap-archive/task-15.md)
 
 ## 10. First release
 
@@ -84,3 +86,4 @@ Not planned, collected while working:
 - English UI strings (the page is German like RedMatic's).
 - The self-update modal could show the release notes inline (the GitHub
   releases API has the body).
+

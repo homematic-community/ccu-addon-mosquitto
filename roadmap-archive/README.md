@@ -20,3 +20,4 @@ index (marked ✅ there, linking here).
 - [task-11.md](task-11.md) — Bridge setup in the web UI ✅ 2026-09-05
 - [task-12.md](task-12.md) — TLS listeners in the default configuration ✅ 2026-09-05
 - [task-13.md](task-13.md) — CCU firewall: show blocked ports, open them from the UI ✅ 2026-09-05
+- [task-15.md](task-15.md) — Persistence on a USB stick, configurable in the UI ✅ 2026-09-05
