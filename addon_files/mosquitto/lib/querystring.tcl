@@ -22,6 +22,12 @@ proc run {args} {
     return [exec sh -c "$cmd 2>&1"]
 }
 
+# Request bytes pass through unchanged: the decoded value stays a byte string
+# and the system encoding is iso8859-1, so a password with an umlaut reaches
+# mosquitto_passwd as the same UTF-8 bytes an MQTT client sends. (Tcl would
+# otherwise re-encode it with the CGI's locale.)
+catch {encoding system iso8859-1}
+
 # character by character on purpose: no [subst] on user input
 proc urldecode {str} {
     set str [string map {+ " "} $str]
@@ -40,7 +46,7 @@ proc urldecode {str} {
             incr i
         }
     }
-    return [encoding convertfrom utf-8 $out]
+    return $out
 }
 
 proc parse_pairs {input arrayName} {
