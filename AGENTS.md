@@ -24,16 +24,19 @@ under `/usr/local/addons/mosquitto`.
   - `bin/mosquitto-service` — start/stop/restart/reload/status/info/uninstall
     (linked as `/usr/local/etc/config/rc.d/mosquitto`)
   - `bin/mosquitto-update` — self-update worker started by `www/update.cgi`
-  - `etc/mosquitto.conf` — the *default* config, copied on first install
-    only; on the CCU the file is owned by the user (UI + command line)
+  - `bin/update_addon` — tclsh script that registers/removes the
+    configuration button in the CCU's `hm_addons.cfg`
+  - `etc/mosquitto.conf.default` — the default config, copied to
+    `etc/mosquitto.conf` on first install only; on the CCU that file is
+    owned by the user (UI + command line)
   - `www/` — settings page (tclsh CGIs + one HTML + one CSS + one JS, no
     frameworks), `lib/` — shared tcl helpers (session check, query string)
-- `tools/<arch>/bin/update_addon` — the CCU tool that registers the
-  configuration button in `hm_addons.cfg` (from RedMatic).
+- `build_in_container.sh` — runs inside the Alpine build container.
 - `test/e2e.sh` — end-to-end test of the built x86_64 package in a Debian
-  container (needs docker).
-- `update_versions.js` — checks the Alpine edge Mosquitto version against
-  the pinned one and bumps `package.json` (used by `auto-release.yml`).
+  container (needs docker); `test/parser.test.js` — unit test of the
+  mosquitto.conf parser in `www/js/script.js` (plain node).
+- `update_versions.js` — checks the newest Mosquitto release tag against
+  the pinned version and bumps `package.json` (used by `auto-release.yml`).
 - CI: `.github/workflows/ci.yml` (syntax, 3-arch build, e2e), `build.yml`
   (manual release build), `auto-release.yml` (daily automatic releases on
   new Mosquitto versions).

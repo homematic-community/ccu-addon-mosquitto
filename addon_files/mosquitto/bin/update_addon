@@ -1,0 +1,59 @@
+#!/bin/tclsh
+#
+#   Registers or removes the addon's configuration button in the CCU WebUI
+#   (Einstellungen > Systemsteuerung > Zusatzsoftware).
+#
+#     update_addon <id> <cfg file>    add or update the entry
+#     update_addon <id>               remove the entry
+#
+#   /usr/local/etc/config/hm_addons.cfg is a flat Tcl list of id/dict pairs
+#   as written by `array get` - exactly what the firmware's own
+#   ::HomeMatic::Addon::AddConfigPage does (the original CCU3 firmware has
+#   no RemoveConfigPage, hence this script instead of the package). The cfg
+#   file holds the dict in braces, e.g.
+#   {CONFIG_URL /addons/mosquitto/settings.cgi CONFIG_DESCRIPTION {de {...} en {...}} ID mosquitto CONFIG_NAME Mosquitto}
+#
+
+set CONFIG_FILE /usr/local/etc/config/hm_addons.cfg
+
+if {$argc < 1 || $argc > 2} {
+    puts stderr "usage: update_addon <id> \[<cfg file>\]"
+    exit 1
+}
+set id [lindex $argv 0]
+
+array set addons {}
+if {[file exists $CONFIG_FILE]} {
+    set fp [open $CONFIG_FILE r]
+    set content [string trim [read $fp]]
+    close $fp
+    if {$content != ""} {
+        if {[catch {array set addons $content} err]} {
+            puts stderr "error: $CONFIG_FILE is not a valid addon list: $err"
+            exit 1
+        }
+    }
+}
+
+if {$argc == 2} {
+    set fp [open [lindex $argv 1] r]
+    set cfg [string trim [read $fp]]
+    close $fp
+    if {[llength $cfg] == 1} {
+        # the dict is wrapped in braces in the cfg file
+        set cfg [lindex $cfg 0]
+    }
+    if {[catch {dict get $cfg CONFIG_URL}]} {
+        puts stderr "error: cfg file has no CONFIG_URL"
+        exit 1
+    }
+    set addons($id) $cfg
+} else {
+    if {[info exists addons($id)]} {
+        unset addons($id)
+    }
+}
+
+set fp [open $CONFIG_FILE w]
+puts -nonewline $fp [array get addons]
+close $fp

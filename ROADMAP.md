@@ -44,17 +44,27 @@ only. Everything below replaces that.
   itself is EPL-2.0/EDL-1.0 — the bundled component licenses are listed in
   the addon's licenses page (task 4).
 
-## 2. Build from Alpine packages for three architectures
+## 2. Build from source in Alpine containers for three architectures
 
-Same approach as RedMatic's armv7l Node.js runtime, now for all three
-targets: `build_addon.sh <armv7l|aarch64|x86_64>` resolves the Alpine
-package closure (`alpine-packages.mjs`, copied from RedMatic), downloads
-the `.apk` files, copies the binaries plus the transitive shared-library
-closure (`patchelf --print-needed`) and the musl loader into the addon tree
-and rewrites interpreter and RPATH to `/usr/local/addons/mosquitto/lib`.
-The CCU's own libc (glibc 2.27 on the CCU3 firmware, current glibc on
-OpenCCU) is irrelevant, the runtime is self-contained. No `LD_LIBRARY_PATH`
-anywhere (it would poison firmware binaries with musl libraries).
+Same self-contained-musl approach as RedMatic's armv7l Node.js runtime, now
+for all three targets: `build_addon.sh <armv7l|aarch64|x86_64>` compiles
+the official Mosquitto source tarball inside an Alpine container of the
+target architecture (`build_in_container.sh`, docker + qemu/binfmt for
+ARM) with a minimal feature set, copies the binaries plus the transitive
+shared-library closure (`patchelf --print-needed`: musl, OpenSSL 3, cJSON)
+and the musl loader into the addon tree and rewrites interpreter and RPATH
+to `/usr/local/addons/mosquitto/lib`. The CCU's own libc (glibc 2.27 on the
+CCU3 firmware, current glibc on OpenCCU) is irrelevant, the runtime is
+self-contained. No `LD_LIBRARY_PATH` anywhere (it would poison firmware
+binaries with musl libraries).
+
+Why not Alpine's own mosquitto package (the first attempt, 2026-09-05):
+Alpine builds with the HTTP API (libmicrohttpd → gnutls, nettle, gmp,
+p11-kit, libidn2, …), sqlite persistence, libwebsockets and editline — 17
+MB unpacked / 7.4 MB compressed for features the addon does not use, versus
+7.7 MB / 3.3 MB from the source build. And the source build makes a
+release possible on the day of a Mosquitto release, independent of the
+distribution's packaging.
 
 - Shipped: `bin/mosquitto`, `mosquitto_sub`, `mosquitto_pub`,
   `mosquitto_ctrl`, `mosquitto_passwd`, the `mosquitto_password_file.so`
@@ -65,16 +75,20 @@ anywhere (it would poison firmware binaries with musl libraries).
   `mosquitto_ctrl dynsec`, not managed by the UI). Not shipped:
   persist-sqlite and sparkplug plugins, `mosquitto_rr`,
   `mosquitto_db_dump`, `mosquitto_signal`, C++ bindings.
-- Libraries follow from the closure: musl, OpenSSL 3, libwebsockets,
-  cJSON, libmicrohttpd, c-ares, libedit/ncurses (mosquitto_ctrl).
-- Alpine branch: `edge` (tracks Mosquitto releases within days). The
-  version in `package.json` is `<mosquitto>+<addon build>`; the build
-  refuses an Alpine package whose Mosquitto version does not match.
-- Build writes `versions` (VERSION_ADDON, MOSQUITTO_VERSION, ALPINE
-  package versions), `www/licenses.html` (components, versions, licenses
-  and upstream URLs from the APKINDEX `L:`/`U:` fields) and `.sha256`
-  siblings next to the tarballs in `dist/`. Checksum files carry the bare
-  file name (RedMatic's had the build machine's absolute path).
+- Feature set of the build: TLS (+PSK), built-in websockets (2.1+, no
+  libwebsockets), bridges, persistence, `$CONTROL` (DynSec), unix
+  sockets; off: HTTP API, sqlite persistence, editline, SRV/c-ares,
+  SOCKS, systemd, docs. Libraries follow from the closure: musl, OpenSSL
+  3, cJSON (from the Alpine release of the container, `alpine:3.22`).
+- The version in `package.json` is `<mosquitto>+<addon build>`; the build
+  compiles exactly that Mosquitto version (mosquitto.org tarball, GitHub
+  tag archive as fallback).
+- Build writes `versions` (VERSION_ADDON, MOSQUITTO_VERSION, ADDON_ARCH,
+  ALPINE_VERSION, package versions of the bundled libraries),
+  `www/licenses.html` (components, versions, licenses and upstream URLs
+  from apk's installed database) and `.sha256` siblings next to the
+  tarballs in `dist/`. Checksum files carry the bare file name (RedMatic's
+  had the build machine's absolute path).
 - Package names as before: `mosquitto-<version>.tar.gz` (armv7l, CCU3),
   `mosquitto-aarch64-<version>.tar.gz`, `mosquitto-x86_64-<version>.tar.gz`.
 - Self-check at the end of the build: every DT_NEEDED entry of every
@@ -87,8 +101,11 @@ anywhere (it would poison firmware binaries with musl libraries).
   with a pid file, `-c etc/mosquitto.conf`, syslog via `log_dest syslog`
   (busybox syslogd → `/var/log/messages`, tag `mosquitto`). `info` carries
   `Config-Url` so the CCU WebUI shows the configuration button;
-  `update_addon` (the CCU tool checked in under `tools/<arch>/`, from
-  RedMatic) registers the button in `hm_addons.cfg`.
+  `bin/update_addon` registers the button in `hm_addons.cfg` — a tclsh
+  script doing what the firmware's `::HomeMatic::Addon::AddConfigPage`
+  does (the CCU3 firmware has no `RemoveConfigPage`), instead of the
+  opaque 32-bit `update_addon` binaries RedMatic carries under `tools/`
+  (i386/armv7 ELFs that only run through the CCUs' compat loaders).
 - `update_script`: mount check, stop the running service, copy the tree,
   create links (`rc.d`, `www`), exit 10 on a fresh install (the CCU3
   firmware reboots), exit 0 and start the service itself on an update
@@ -211,10 +228,9 @@ becomes `2.1.2+1`, the next Mosquitto release starts again at `+0`.
 Tags and asset names carry the literal `+` (worked for `1.5.8+4`, GitHub
 encodes it as `%2B` in URLs).
 
-`auto-release.yml` runs daily: `update_versions.js` reads the Mosquitto
-version from the Alpine edge APKINDEX (that is the version the build can
-actually produce; upstream tags are reported alongside for information).
-Newer than the pinned one → set `<new>+0`, build all three architectures,
+`auto-release.yml` runs daily: `update_versions.js` reads the newest
+release tag of eclipse-mosquitto/mosquitto (plain `vX.Y.Z`, no release
+candidates). Newer than the pinned one → set `<new>+0`, build all three architectures,
 run the e2e test, commit, push, create the release (draft unless the
 repository variable `AUTO_RELEASE_PUBLISH` is `true`), open an issue when
 the run fails — the RedMatic task 10 pattern. Minor/major switches of

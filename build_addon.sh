@@ -152,8 +152,7 @@ cp -r $ADDON_FILES/* $ADDON_TMP/
 # the scripts must be executable no matter how the checkout was made
 chmod 755 $ADDON/bin/* $ADDON/www/*.cgi $ADDON_TMP/update_script
 
-echo "copying tools for $ARCH ..."
-cp -r $BUILD_DIR/tools/$ARCH/* $ADDON/
+# update_script registers the WebUI button through ./update_addon
 cd $ADDON_TMP
 ln -s mosquitto/bin/update_addon ./
 cd $BUILD_DIR
