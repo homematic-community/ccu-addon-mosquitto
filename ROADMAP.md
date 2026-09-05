@@ -39,6 +39,7 @@ released yet** — that is task 10, the maintainer's call.
 - 13. CCU firewall: show blocked ports, open them from the UI ✅ [archived](roadmap-archive/task-13.md)
 - [14. Follow-ups and ideas](#14-follow-ups-and-ideas)
 - 15. Persistence on a USB stick, configurable in the UI ✅ [archived](roadmap-archive/task-15.md)
+- 16. Tests in Node.js: unit, CGI integration, web UI end to end, coverage ✅ [archived](roadmap-archive/task-16.md)
 
 ## 10. First release
 
@@ -86,4 +87,3 @@ Not planned, collected while working:
 - English UI strings (the page is German like RedMatic's).
 - The self-update modal could show the release notes inline (the GitHub
   releases API has the body).
-

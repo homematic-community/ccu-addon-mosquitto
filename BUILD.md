@@ -45,6 +45,19 @@ once (the `mqtt` client for the tests), then:
   anonymous and wrong passwords, add/change/delete on reload), bridge,
   persistence location, migration of a 1.5.8 `conf.d` layout, self-update
   worker, stop, uninstall. `KEEP=1` keeps the container afterwards.
+- `npm run test:webui` — `test/webui.test.js`: the real settings page and its
+  CGIs. The container additionally gets lighttpd with the firmware's CGI
+  rules, a stub of `tclrega.so` (the session check), a stub of
+  `/lib/libfirewall.tcl` and a fake `curl` for the GitHub lookups
+  (`test/lib/webui-setup.js`). Section A calls every CGI with every command
+  and error path over HTTP; section B drives the page with headless chromium
+  (`npx playwright install chromium` once) and verifies each setting against
+  the running broker: listeners, TLS certificate sources, users with
+  write-only passwords, ACL, log types, persistence location incl. a
+  bind-mounted "USB stick", firewall, bridges, the failed-start error
+  display, the self-update through the page, tabs, an expired session.
+  Section C measures the browser coverage of `www/js/script.js` and fails
+  below 90 %. `KEEP=1` leaves the page at http://127.0.0.1:18080.
 
 ## Releases
 

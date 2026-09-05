@@ -35,7 +35,10 @@ under `/usr/local/addons/mosquitto`.
 - `test/` — `node:test` suites (Node.js is a test tool only, nothing of it
   ships): `parser.test.js` (unit, the mosquitto.conf model of the page),
   `e2e.test.js` (the built x86_64 package in a Debian container the test
-  starts itself; broker checks with the `mqtt` npm client; needs docker).
+  starts itself; broker checks with the `mqtt` npm client; needs docker),
+  `webui.test.js` (the settings page and CGIs through lighttpd in that
+  container, headless chromium via playwright, every UI path against the
+  broker, coverage of `www/js/script.js`). Shared helpers in `test/lib/`.
 - `update_versions.js` — checks the newest Mosquitto release tag against
   the pinned version and bumps `package.json` (used by `auto-release.yml`).
 - CI: `.github/workflows/ci.yml` (syntax, 3-arch build, e2e), `build.yml`
