@@ -40,6 +40,9 @@ releases. **`2.1.2+0` was released on 2026-09-05** (task 10); from now on
 - [14. Follow-ups and ideas](#14-follow-ups-and-ideas)
 - 15. Persistence on a USB stick, configurable in the UI ✅ [archived](roadmap-archive/task-15.md)
 - 16. Tests in Node.js: unit, CGI integration, web UI end to end, coverage ✅ [archived](roadmap-archive/task-16.md)
+- [17. Per-listener authentication](#17-per-listener-authentication)
+- [18. ACL editing in the UI (questionable)](#18-acl-editing-in-the-ui-questionable)
+- [Out of scope](#out-of-scope)
 
 ## 14. Follow-ups and ideas
 
@@ -53,11 +56,84 @@ Not planned, collected while working:
 - The old 1.5.8 update check reads `VERSION` from master, which no longer
   exists: old installs will show "n/a" for the update; the README and
   release notes tell users to update through the Zusatzsoftware page.
-- ACL file editing in the UI (currently command line only), per-listener
-  authentication (`per_listener_settings` is deprecated in 2.1, the
-  listener-specific replacements arrive with 2.1/3.0), DynSec management
-  (`mosquitto_ctrl dynsec` works on the command line, the plugin is
-  bundled).
 - English UI strings (the page is German like RedMatic's).
 - The self-update modal could show the release notes inline (the GitHub
   releases API has the body).
+
+## 17. Per-listener authentication
+
+Maintainer's wish (2026-09-05). Common setup: a loopback listener
+(`127.0.0.1:1883`) for the CCU's own clients (Node-RED, hm2mqtt, …)
+without authentication, and an external listener that requires
+username/password. Today the "Anonyme Verbindungen" select is global and
+the page writes one `allow_anonymous` for the whole broker.
+
+- Mosquitto 2.1 has `listener_allow_anonymous [ true | false ]`: a
+  listener-scoped override of the global `allow_anonymous`, no
+  `per_listener_settings` needed (that one is deprecated and would also
+  scope the password plugin per listener — not wanted). The 2.1.2 binary
+  in the package knows the option (`strings` on the test box), the
+  man page documents it under the listener options.
+- UI: keep the global select as the default and add a per-listener
+  choice on each listener card — "wie global / erlaubt / nicht erlaubt"
+  — which maps to the absence or presence of `listener_allow_anonymous`
+  in that listener block. The password plugin block stays global, so
+  authenticated clients can still log in on a listener that also allows
+  anonymous connections.
+- Parser (`www/js/script.js`): `listener_allow_anonymous` becomes a
+  managed listener key (`test/parser.test.js` cases for round trip,
+  missing, and `per_listener_settings true` files from old installs —
+  those should be left verbatim and shown with a hint, not rewritten).
+- The auth warning ("no password file and no anonymous connections")
+  has to be evaluated per listener; the firewall card is unaffected.
+- Default config: unchanged (one listener, global setting). Document in
+  the README's authentication section with the loopback/external example.
+- Prior art: [she](https://github.com/hobbyquaker/she) models
+  `allow_anonymous` per listener block in its `mosquitto-conf.js` and
+  shows a card per listener — same shape as our listener cards.
+
+## 18. ACL editing in the UI (questionable)
+
+Maintainer's request (2026-09-05), **marked questionable by the
+maintainer**: the tendency is the same as for DynSec below —
+anyone who needs topic ACLs has a setup sophisticated enough to be
+managed by [she](https://github.com/hobbyquaker/she) rather than by an
+addon settings page. Kept here so the UX idea is not lost; decide before
+starting.
+
+- Today: `acl_file` is written by the page (path only), the file itself
+  is maintained on the command line; "Konfiguration neu laden" picks up
+  changes. The password-file plugin (`mosquitto_password_file.so`) does
+  the users, the ACL file is the classic `acl_file` format
+  (`topic [read|write|readwrite|deny] <topic>`, `user <name>`,
+  `pattern … %u/%c`).
+- UX sketch if it is done: one table on the "Authentifizierung" card —
+  rows of (scope: anonymous / user *x* / pattern) × (access) × (topic),
+  with the users pulled from the password file so a user is a dropdown,
+  not free text; "deny" rows first as Mosquitto evaluates them; a
+  read-only preview of the generated file; save writes the file and
+  sends SIGHUP (reload, no restart). Unknown lines pass through verbatim
+  like in `mosquitto.conf`.
+- Prior art in she: ACLs are **not** edited as a file at all — she uses
+  the DynSec plugin (roles with ACL rules of type
+  `publishClientSend` / `publishClientReceive` / `subscribePattern` /
+  `unsubscribePattern`, allow/deny, priority; users and groups get roles)
+  over the `$CONTROL/dynamic-security/v1` topic, live, no reload
+  (`doc/broker-management.md`, "Users & Roles" tab, `she.broker.*`
+  script API, HTTP API under `/she/broker/*`). That model is richer than
+  the ACL file and is the reason this task is questionable: a file-based
+  ACL editor would be a second, weaker way to do what she already does.
+
+## Out of scope
+
+- **DynSec configuration UI.** The Dynamic Security plugin is bundled
+  (`mosquitto_ctrl dynsec` works on the command line), but the addon
+  will not get a UI for users/roles/groups. Anyone who wants that should
+  look at [she](https://github.com/hobbyquaker/she)'s broker management:
+  setup wizard that bootstraps DynSec on an existing broker, users,
+  roles, ACLs and groups with immediate effect, listener and TLS
+  configuration, certificate management, deployment to a remote broker
+  over SSH — see `doc/broker-management.md` in that repository. The
+  addon stays the small, self-contained broker with the basics
+  (listeners, TLS, password file, bridges, persistence).
+
