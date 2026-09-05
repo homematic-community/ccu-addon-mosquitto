@@ -17,6 +17,7 @@ index (marked ✅ there, linking here).
 - [task-7.md](task-7.md) — Version scheme and automatic releases ✅ 2026-09-05
 - [task-8.md](task-8.md) — Hardware verification on the lab systems ✅ 2026-09-05 (CCU3 incl. migration from 1.5.8+4, OpenCCU x86_64 and aarch64)
 - [task-9.md](task-9.md) — Documentation ✅ 2026-09-05
+- [task-10.md](task-10.md) — First release ✅ 2026-09-05
 - [task-11.md](task-11.md) — Bridge setup in the web UI ✅ 2026-09-05
 - [task-12.md](task-12.md) — TLS listeners in the default configuration ✅ 2026-09-05
 - [task-13.md](task-13.md) — CCU firewall: show blocked ports, open them from the UI ✅ 2026-09-05

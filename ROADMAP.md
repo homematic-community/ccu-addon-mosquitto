@@ -19,8 +19,8 @@ configuration page with listeners, TLS certificate, authentication with
 user management, bridges, CCU firewall status, logging, persistence
 (also on a USB stick),
 process control, self-update; CI, e2e and parser tests, automatic
-releases. `master` is at `2.1.2+0`, **nothing has been pushed, tagged or
-released yet** — that is task 10, the maintainer's call.
+releases. **`2.1.2+0` was released on 2026-09-05** (task 10); from now on
+`auto-release.yml` publishes a new package for every Mosquitto release.
 
 ## Contents
 
@@ -33,39 +33,13 @@ released yet** — that is task 10, the maintainer's call.
 - 7. Version scheme and automatic releases ✅ [archived](roadmap-archive/task-7.md)
 - 8. Hardware verification on the lab systems ✅ [archived](roadmap-archive/task-8.md)
 - 9. Documentation ✅ [archived](roadmap-archive/task-9.md)
-- [10. First release](#10-first-release)
+- 10. First release ✅ [archived](roadmap-archive/task-10.md)
 - 11. Bridge setup in the web UI ✅ [archived](roadmap-archive/task-11.md)
 - 12. TLS listeners in the default configuration ✅ [archived](roadmap-archive/task-12.md)
 - 13. CCU firewall: show blocked ports, open them from the UI ✅ [archived](roadmap-archive/task-13.md)
 - [14. Follow-ups and ideas](#14-follow-ups-and-ideas)
 - 15. Persistence on a USB stick, configurable in the UI ✅ [archived](roadmap-archive/task-15.md)
 - 16. Tests in Node.js: unit, CGI integration, web UI end to end, coverage ✅ [archived](roadmap-archive/task-16.md)
-
-## 10. First release
-
-`2.1.2+0` — everything is on `master`, verified (task 8), **no push, tag
-or release before the maintainer has seen it on the test boxes**
-(instruction of 2026-09-05). Steps once the maintainer gives the go:
-
-1. `git push origin master` — `ci.yml` runs (syntax, parser test, 3-arch
-   build with qemu, e2e) and must be green. Repository variable
-   `AUTO_RELEASE_PUBLISH` decides whether automatic releases are published
-   directly or created as drafts.
-2. Run the **build-release** workflow (workflow_dispatch) → tag `2.1.2+0`,
-   draft prerelease with the three tarballs, `.sha256` files and the
-   release body (downloads, `docs/RELEASE_NOTES.md`, changes, versions).
-3. Review the draft, publish it as a full release so `releases/latest`
-   moves from `1.5.8+4` to `2.1.2+0` — from then on the old addon's
-   update check (raw `VERSION` on master: gone, so it says "n/a") no longer
-   applies; the new page's update check and self-update use the releases
-   API.
-4. Later Mosquitto releases: `auto-release.yml` does the rest (daily
-   check of the Mosquitto tags → `<new>+0` → build, e2e, commit, release).
-
-Points to know for the release notes: `docs/RELEASE_NOTES.md` is
-included automatically; the CCU3 test box has 1883 occupied by Node-RED's
-aedes broker, which is why the migration there used ports 1885/1886 — not
-a product issue.
 
 ## 14. Follow-ups and ideas
 
