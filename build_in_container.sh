@@ -38,10 +38,11 @@ mkdir -p $SRC $STAGE
 cd $SRC
 URL=https://mosquitto.org/files/source/mosquitto-$VERSION.tar.gz
 echo "### download $URL"
-if ! curl -fsSL --max-time 300 -o mosquitto.tar.gz $URL; then
+# short timeouts: mosquitto.org has been seen to hang for many minutes, GitHub is the fallback
+if ! curl -fsSL --connect-timeout 20 --max-time 120 -o mosquitto.tar.gz $URL; then
     URL=https://github.com/eclipse-mosquitto/mosquitto/archive/refs/tags/v$VERSION.tar.gz
     echo "### not on mosquitto.org, trying $URL"
-    curl -fsSL --max-time 300 -o mosquitto.tar.gz $URL
+    curl -fsSL --connect-timeout 20 --max-time 300 -o mosquitto.tar.gz $URL
 fi
 tar -xzf mosquitto.tar.gz
 cd mosquitto-$VERSION
