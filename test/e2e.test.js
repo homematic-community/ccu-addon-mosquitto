@@ -5,149 +5,25 @@
 //   npm run test:e2e            (needs docker and dist/mosquitto-x86_64-*.tar.gz)
 //   KEEP=1 npm run test:e2e     keeps the container for a look afterwards
 //
-// A Debian container gets what the CCU has (busybox sh and syslogd, tcl, a
-// CCU-style server.pem), then OpenCCU's /bin/install_addon is replayed for
-// a fresh install and an update. Broker checks use the mqtt npm package
-// from the host through published ports; the bundled clients are exercised
-// once through docker exec. The tests run in file order and build on each
-// other.
+// A Debian container gets what the CCU has (test/lib/container.js), then
+// OpenCCU's /bin/install_addon is replayed for a fresh install and an
+// update. Broker checks use the mqtt npm package from the host through
+// published ports; the bundled clients are exercised once through docker
+// exec. The tests run in file order and build on each other.
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const { spawnSync } = require('node:child_process');
-const fs = require('node:fs');
-const path = require('node:path');
-const mqtt = require('mqtt');
+const { container, connect, roundtrip, refused, publish, sleep, waitFor, ADDON, BIN, CONFIG, RC } = require('./lib/container');
 
-const DIST = path.resolve(process.env.DIST || path.join(__dirname, '..', 'dist'));
-const PKG = fs.readdirSync(DIST).find(f => /^mosquitto-x86_64-.*\.tar\.gz$/.test(f));
-if (!PKG) throw new Error(`no mosquitto-x86_64-*.tar.gz in ${DIST} (run ./build_addon.sh x86_64 first)`);
-
-const NAME = 'mosquitto-e2e';
-const HOST = '127.0.0.1';
-const P = { mqtt: 18883, ws: 18884, mqtts: 18885, wss: 18886 };
-const ADDON = '/usr/local/addons/mosquitto';
-const BIN = `${ADDON}/bin`;
-const CONFIG = `${ADDON}/etc/mosquitto.conf`;
-const RC = '/usr/local/etc/config/rc.d/mosquitto';
-
-// --- container helpers --------------------------------------------------------
-
-function docker(args, opts = {}) {
-    const r = spawnSync('docker', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, ...opts });
-    return { code: r.status, out: (r.stdout || '') + (r.stderr || '') };
-}
-
-// run a shell command in the container: {code, out}
-function sh(cmd) {
-    return docker(['exec', NAME, 'sh', '-c', cmd]);
-}
-
-// run and require exit 0, return the output
-function shOk(cmd) {
-    const r = sh(cmd);
-    assert.equal(r.code, 0, `command failed (${r.code}): ${cmd}\n${r.out}`);
-    return r.out;
-}
-
-// what OpenCCU's /bin/install_addon does: extract into a temp dir below
-// /usr/local/tmp, run update_script from inside it, delete the temp dir
-function installAddon() {
-    return sh(`dir=$(mktemp -d -p /usr/local/tmp) && tar -C "$dir" --no-same-owner --no-same-permissions -xf /dist/${PKG} && (cd "$dir" && ./update_script HM-RASPBERRYMATIC >/tmp/update_script.log 2>&1); rc=$?; rm -rf "$dir"; cat /tmp/update_script.log; exit $rc`);
-}
-
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-async function waitFor(fn, what, timeoutMs = 30000) {
-    const t0 = Date.now();
-    while (Date.now() - t0 < timeoutMs) {
-        if (await fn()) return;
-        await sleep(500);
-    }
-    throw new Error(`timeout waiting for ${what}`);
-}
-
-function brokerPid() {
-    return sh('pgrep -x mosquitto | head -1').out.trim();
-}
-
-// --- mqtt helpers ----------------------------------------------------------------
-
-// connect and resolve with the client, reject with the broker's reason
-function connect(url, opts = {}) {
-    return new Promise((resolve, reject) => {
-        const c = mqtt.connect(url, { reconnectPeriod: 0, connectTimeout: 5000, rejectUnauthorized: false, ...opts });
-        const fail = err => { c.removeAllListeners(); c.end(true); reject(err instanceof Error ? err : new Error(String(err))); };
-        c.once('connect', () => { c.removeListener('error', fail); c.removeListener('close', fail); resolve(c); });
-        c.once('error', fail);
-        c.once('close', () => fail(new Error('connection closed before CONNACK')));
-    });
-}
-
-// publish on one connection, receive on another; returns the payload
-async function roundtrip(url, opts = {}, topic = `e2e/${Date.now()}`, extra = {}) {
-    const sub = await connect(url, opts);
-    const pub = await connect(url, opts);
-    try {
-        const got = new Promise((resolve, reject) => {
-            const t = setTimeout(() => reject(new Error(`no message on ${topic} within 10 s`)), 10000);
-            sub.on('message', (t2, payload) => { if (t2 === (extra.receiveTopic || topic)) { clearTimeout(t); resolve(payload.toString()); } });
-        });
-        await sub.subscribeAsync(extra.receiveTopic || topic);
-        await pub.publishAsync(topic, `hello-${Date.now()}`, extra.publish || {});
-        return await got;
-    } finally {
-        sub.end(true);
-        pub.end(true);
-    }
-}
-
-// the broker must refuse the connection; returns the error message
-async function refused(url, opts = {}) {
-    try {
-        const c = await connect(url, opts);
-        c.end(true);
-    } catch (err) {
-        return err.message;
-    }
-    throw new Error(`connection to ${url} succeeded, expected a refusal`);
-}
-
-const U = {
-    mqtt: `mqtt://${HOST}:${P.mqtt}`,
-    ws: `ws://${HOST}:${P.ws}`,
-    mqtts: `mqtts://${HOST}:${P.mqtts}`,
-    wss: `wss://${HOST}:${P.wss}`
-};
+const box = container('mosquitto-e2e', { mqtt: 18883, ws: 18884, mqtts: 18885, wss: 18886 });
+const { sh, shOk, U } = box;
+const installAddon = () => box.installAddon();
+const brokerPid = () => box.brokerPid();
+const waitForBroker = opts => box.waitForBroker(opts);
 const AUTH = { username: 'e2e', password: 'secret' };
 
-async function waitForBroker(opts = {}) {
-    await waitFor(async () => { try { (await connect(U.mqtt, opts)).end(true); return true; } catch (e) { return false; } }, 'the broker', 30000);
-}
-
-// --- container lifecycle ------------------------------------------------------------
-
-before(() => {
-    docker(['rm', '-f', NAME]);
-    // --init: a reaping pid 1, or stopped daemons stay as zombies that pgrep still finds
-    const r = docker(['run', '-d', '--init', '--platform', 'linux/amd64', '--name', NAME,
-        '-p', `${HOST}:${P.mqtt}:1883`, '-p', `${HOST}:${P.ws}:1884`, '-p', `${HOST}:${P.mqtts}:8883`, '-p', `${HOST}:${P.wss}:8884`,
-        '-v', `${DIST}:/dist:ro`, 'debian:bookworm-slim', 'sleep', 'infinity']);
-    assert.equal(r.code, 0, `docker run failed: ${r.out}`);
-    // what the CCU has: busybox as /bin/sh and syslogd, tcl for update_addon
-    // and the CGI helpers, curl, openssl, a CCU-style server.pem
-    shOk('export DEBIAN_FRONTEND=noninteractive; apt-get update -qq >/dev/null && apt-get install -y -qq --no-install-recommends curl ca-certificates iproute2 procps busybox openssl tcl >/dev/null');
-    shOk('busybox syslogd -O /var/log/messages && mkdir -p /usr/local/tmp /usr/local/etc/config/rc.d /usr/local/etc/config/addons/www /etc/config && ln -sf /bin/busybox /bin/sh');
-    shOk('openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 30 -subj /CN=e2e-ccu -keyout /tmp/ccu.key -out /tmp/ccu.crt 2>/dev/null && cat /tmp/ccu.crt /tmp/ccu.key > /etc/config/server.pem');
-});
-
-after(() => {
-    if (process.env.KEEP) {
-        console.log(`container ${NAME} kept (KEEP=1)`);
-        return;
-    }
-    docker(['rm', '-f', NAME]);
-});
+before(() => box.start());
+after(() => box.stop());
 
 // --- fresh install and start -------------------------------------------------------
 
@@ -167,7 +43,7 @@ test('start: broker answers, runs from /, logs its start', async () => {
     await waitForBroker();
     assert.match(shOk(`${RC} status`), /"running":true/);
     assert.equal(shOk(`readlink /proc/${brokerPid()}/cwd`).trim(), '/', 'working directory of the broker');
-    assert.match(shOk('cat /var/log/messages'), /mosquitto version \d+\.\d+\.\d+ starting/);
+    assert.match(box.syslog(), /mosquitto version \d+\.\d+\.\d+ starting/);
 });
 
 test('pub/sub round trip on 1883, also with the bundled clients', async () => {
@@ -231,7 +107,7 @@ test('bridge block: the broker bridges local/ to itself over a second listener a
     shOk(`${BIN}/mosquitto -c ${CONFIG} --test-config`);
     shOk(`${RC} restart`);
     await waitForBroker(AUTH);
-    await waitFor(() => /Connecting bridge e2e-self/.test(sh('cat /var/log/messages').out), 'the bridge connection in the syslog', 15000);
+    await waitFor(() => /Connecting bridge e2e-self/.test(box.syslog()), 'the bridge connection in the syslog', 15000);
     await sleep(1000);
     const got = await roundtrip(U.mqtt, AUTH, 'local/bridge/test', { receiveTopic: 'remote/bridge/test' });
     assert.match(got, /^hello-/);
@@ -243,9 +119,7 @@ test('persistence_location elsewhere: directory created by the service, retained
     shOk(`sed -i 's|^persistence_location .*|persistence_location /usr/local/tmp/persist-test/|' ${CONFIG} && ${RC} restart`);
     await waitForBroker(AUTH);
     shOk('test -d /usr/local/tmp/persist-test');
-    const c = await connect(U.mqtt, AUTH);
-    await c.publishAsync('e2e/retained', 'keep-me', { retain: true, qos: 1 });
-    await new Promise(resolve => c.end(false, resolve));
+    await publish(U.mqtt, AUTH, 'e2e/retained', 'keep-me', { retain: true });
     shOk(`${RC} restart`);
     await waitForBroker(AUTH);
     shOk('test -s /usr/local/tmp/persist-test/mosquitto.db');

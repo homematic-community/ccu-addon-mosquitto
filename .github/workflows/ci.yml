@@ -80,7 +80,13 @@ jobs:
           name: mosquitto-x86_64
           path: dist
 
-      - name: End-to-end test (x86_64 package in a Debian container)
+      - name: Install test dependencies (mqtt client, playwright with chromium)
         run: |
           npm install --no-package-lock --no-audit --no-fund
-          npm run test:e2e
+          npx playwright install --with-deps chromium
+
+      - name: End-to-end test (x86_64 package in a Debian container)
+        run: npm run test:e2e
+
+      - name: Web UI test (settings page and CGIs through lighttpd in the container, headless chromium)
+        run: npm run test:webui

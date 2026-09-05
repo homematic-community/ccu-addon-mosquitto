@@ -200,6 +200,15 @@ test('bridge round trip is byte-identical', () => {
     assert.strictEqual(serialise(), BRIDGE);
 });
 
+test('a bridge without an address (just added on the page) is left out of the file', () => {
+    load(BRIDGE);
+    state.bridges.push(newBridge('pending'));
+    const out = serialise();
+    assert.strictEqual(out, BRIDGE, 'unchanged until the address is set');
+    state.bridges[1].address = '10.0.0.3:1883';
+    assert.ok(serialise().includes('connection pending\naddress 10.0.0.3:1883\n'));
+});
+
 test('bridge edits are written, a new bridge is appended, removal drops the block', () => {
     load(BRIDGE);
     state.bridges[0].topics = ['# in 0'];
