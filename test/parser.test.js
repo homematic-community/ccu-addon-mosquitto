@@ -2,27 +2,15 @@
 // (the settings page loads it in the browser, node loads the same file with
 // `document` undefined and gets the model exported).
 //
-//   node test/parser.test.js
+//   node --test test/parser.test.js   (or npm run test:unit)
 
-const assert = require('assert');
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
 const model = require(path.join(__dirname, '..', 'addon_files', 'mosquitto', 'www', 'js', 'script.js'));
 const { parse, load, serialise, state, newListener, newBridge, PASSWD_FILE, PLUGIN_PASSWD, CCU_CERT, ADDON_CERT, ADDON_KEY } = model;
-
-let passed = 0;
-function test(name, fn) {
-    try {
-        fn();
-        passed += 1;
-        console.log('ok: ' + name);
-    } catch (e) {
-        console.log('FAIL: ' + name);
-        console.log(e.stack || e.message);
-        process.exitCode = 1;
-    }
-}
 
 // the shipped default configuration is the primary round-trip fixture
 const DEFAULT = fs.readFileSync(path.join(__dirname, '..', 'addon_files', 'mosquitto', 'etc', 'mosquitto.conf.default'), 'utf8');
@@ -236,4 +224,3 @@ test('bridge edits are written, a new bridge is appended, removal drops the bloc
     assert.ok(out.includes('connection second'), out);
 });
 
-console.log(process.exitCode ? 'parser tests FAILED' : `parser tests passed (${passed})`);

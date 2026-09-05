@@ -1,0 +1,324 @@
+// End-to-end test of the built x86_64 addon package (ROADMAP task 6, ported
+// to node:test in task 16). Node.js is a test tool only, nothing of it ships
+// in the addon.
+//
+//   npm run test:e2e            (needs docker and dist/mosquitto-x86_64-*.tar.gz)
+//   KEEP=1 npm run test:e2e     keeps the container for a look afterwards
+//
+// A Debian container gets what the CCU has (busybox sh and syslogd, tcl, a
+// CCU-style server.pem), then OpenCCU's /bin/install_addon is replayed for
+// a fresh install and an update. Broker checks use the mqtt npm package
+// from the host through published ports; the bundled clients are exercised
+// once through docker exec. The tests run in file order and build on each
+// other.
+
+const { test, before, after } = require('node:test');
+const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const mqtt = require('mqtt');
+
+const DIST = path.resolve(process.env.DIST || path.join(__dirname, '..', 'dist'));
+const PKG = fs.readdirSync(DIST).find(f => /^mosquitto-x86_64-.*\.tar\.gz$/.test(f));
+if (!PKG) throw new Error(`no mosquitto-x86_64-*.tar.gz in ${DIST} (run ./build_addon.sh x86_64 first)`);
+
+const NAME = 'mosquitto-e2e';
+const HOST = '127.0.0.1';
+const P = { mqtt: 18883, ws: 18884, mqtts: 18885, wss: 18886 };
+const ADDON = '/usr/local/addons/mosquitto';
+const BIN = `${ADDON}/bin`;
+const CONFIG = `${ADDON}/etc/mosquitto.conf`;
+const RC = '/usr/local/etc/config/rc.d/mosquitto';
+
+// --- container helpers --------------------------------------------------------
+
+function docker(args, opts = {}) {
+    const r = spawnSync('docker', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, ...opts });
+    return { code: r.status, out: (r.stdout || '') + (r.stderr || '') };
+}
+
+// run a shell command in the container: {code, out}
+function sh(cmd) {
+    return docker(['exec', NAME, 'sh', '-c', cmd]);
+}
+
+// run and require exit 0, return the output
+function shOk(cmd) {
+    const r = sh(cmd);
+    assert.equal(r.code, 0, `command failed (${r.code}): ${cmd}\n${r.out}`);
+    return r.out;
+}
+
+// what OpenCCU's /bin/install_addon does: extract into a temp dir below
+// /usr/local/tmp, run update_script from inside it, delete the temp dir
+function installAddon() {
+    return sh(`dir=$(mktemp -d -p /usr/local/tmp) && tar -C "$dir" --no-same-owner --no-same-permissions -xf /dist/${PKG} && (cd "$dir" && ./update_script HM-RASPBERRYMATIC >/tmp/update_script.log 2>&1); rc=$?; rm -rf "$dir"; cat /tmp/update_script.log; exit $rc`);
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function waitFor(fn, what, timeoutMs = 30000) {
+    const t0 = Date.now();
+    while (Date.now() - t0 < timeoutMs) {
+        if (await fn()) return;
+        await sleep(500);
+    }
+    throw new Error(`timeout waiting for ${what}`);
+}
+
+function brokerPid() {
+    return sh('pgrep -x mosquitto | head -1').out.trim();
+}
+
+// --- mqtt helpers ----------------------------------------------------------------
+
+// connect and resolve with the client, reject with the broker's reason
+function connect(url, opts = {}) {
+    return new Promise((resolve, reject) => {
+        const c = mqtt.connect(url, { reconnectPeriod: 0, connectTimeout: 5000, rejectUnauthorized: false, ...opts });
+        const fail = err => { c.removeAllListeners(); c.end(true); reject(err instanceof Error ? err : new Error(String(err))); };
+        c.once('connect', () => { c.removeListener('error', fail); c.removeListener('close', fail); resolve(c); });
+        c.once('error', fail);
+        c.once('close', () => fail(new Error('connection closed before CONNACK')));
+    });
+}
+
+// publish on one connection, receive on another; returns the payload
+async function roundtrip(url, opts = {}, topic = `e2e/${Date.now()}`, extra = {}) {
+    const sub = await connect(url, opts);
+    const pub = await connect(url, opts);
+    try {
+        const got = new Promise((resolve, reject) => {
+            const t = setTimeout(() => reject(new Error(`no message on ${topic} within 10 s`)), 10000);
+            sub.on('message', (t2, payload) => { if (t2 === (extra.receiveTopic || topic)) { clearTimeout(t); resolve(payload.toString()); } });
+        });
+        await sub.subscribeAsync(extra.receiveTopic || topic);
+        await pub.publishAsync(topic, `hello-${Date.now()}`, extra.publish || {});
+        return await got;
+    } finally {
+        sub.end(true);
+        pub.end(true);
+    }
+}
+
+// the broker must refuse the connection; returns the error message
+async function refused(url, opts = {}) {
+    try {
+        const c = await connect(url, opts);
+        c.end(true);
+    } catch (err) {
+        return err.message;
+    }
+    throw new Error(`connection to ${url} succeeded, expected a refusal`);
+}
+
+const U = {
+    mqtt: `mqtt://${HOST}:${P.mqtt}`,
+    ws: `ws://${HOST}:${P.ws}`,
+    mqtts: `mqtts://${HOST}:${P.mqtts}`,
+    wss: `wss://${HOST}:${P.wss}`
+};
+const AUTH = { username: 'e2e', password: 'secret' };
+
+async function waitForBroker(opts = {}) {
+    await waitFor(async () => { try { (await connect(U.mqtt, opts)).end(true); return true; } catch (e) { return false; } }, 'the broker', 30000);
+}
+
+// --- container lifecycle ------------------------------------------------------------
+
+before(() => {
+    docker(['rm', '-f', NAME]);
+    // --init: a reaping pid 1, or stopped daemons stay as zombies that pgrep still finds
+    const r = docker(['run', '-d', '--init', '--platform', 'linux/amd64', '--name', NAME,
+        '-p', `${HOST}:${P.mqtt}:1883`, '-p', `${HOST}:${P.ws}:1884`, '-p', `${HOST}:${P.mqtts}:8883`, '-p', `${HOST}:${P.wss}:8884`,
+        '-v', `${DIST}:/dist:ro`, 'debian:bookworm-slim', 'sleep', 'infinity']);
+    assert.equal(r.code, 0, `docker run failed: ${r.out}`);
+    // what the CCU has: busybox as /bin/sh and syslogd, tcl for update_addon
+    // and the CGI helpers, curl, openssl, a CCU-style server.pem
+    shOk('export DEBIAN_FRONTEND=noninteractive; apt-get update -qq >/dev/null && apt-get install -y -qq --no-install-recommends curl ca-certificates iproute2 procps busybox openssl tcl >/dev/null');
+    shOk('busybox syslogd -O /var/log/messages && mkdir -p /usr/local/tmp /usr/local/etc/config/rc.d /usr/local/etc/config/addons/www /etc/config && ln -sf /bin/busybox /bin/sh');
+    shOk('openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 30 -subj /CN=e2e-ccu -keyout /tmp/ccu.key -out /tmp/ccu.crt 2>/dev/null && cat /tmp/ccu.crt /tmp/ccu.key > /etc/config/server.pem');
+});
+
+after(() => {
+    if (process.env.KEEP) {
+        console.log(`container ${NAME} kept (KEEP=1)`);
+        return;
+    }
+    docker(['rm', '-f', NAME]);
+});
+
+// --- fresh install and start -------------------------------------------------------
+
+test('fresh install: update_script exits 10, links, WebUI button, info', () => {
+    const r = installAddon();
+    assert.equal(r.code, 10, `update_script exit ${r.code}, expected 10\n${r.out}`);
+    shOk(`test -x ${RC} && test -L /usr/local/etc/config/addons/www/mosquitto && test -f ${CONFIG}`);
+    assert.match(shOk('cat /usr/local/etc/config/hm_addons.cfg'), /^mosquitto \{CONFIG_URL \/addons\/mosquitto\/settings.cgi/);
+    const info = shOk(`${RC} info`);
+    assert.match(info, /^Name: Mosquitto$/m);
+    assert.match(info, /^Version: \d+\.\d+\.\d+\+\d+$/m);
+    assert.match(info, /^Config-Url: \/addons\/mosquitto\/settings.cgi$/m);
+});
+
+test('start: broker answers, runs from /, logs its start', async () => {
+    shOk(`${RC} start`);
+    await waitForBroker();
+    assert.match(shOk(`${RC} status`), /"running":true/);
+    assert.equal(shOk(`readlink /proc/${brokerPid()}/cwd`).trim(), '/', 'working directory of the broker');
+    assert.match(shOk('cat /var/log/messages'), /mosquitto version \d+\.\d+\.\d+ starting/);
+});
+
+test('pub/sub round trip on 1883, also with the bundled clients', async () => {
+    assert.match(await roundtrip(U.mqtt), /^hello-/);
+    const out = shOk(`(${BIN}/mosquitto_sub -h 127.0.0.1 -C 1 -W 10 -t e2e/clients &); sleep 1; ${BIN}/mosquitto_pub -h 127.0.0.1 -t e2e/clients -m from-the-bundled-clients; sleep 1`);
+    assert.match(out, /from-the-bundled-clients/);
+});
+
+test('websockets listener on 1884', async () => {
+    assert.match(await roundtrip(U.ws), /^hello-/);
+});
+
+test('TLS listeners of the default config with the CCU certificate (8883 mqtts, 8884 wss)', async () => {
+    assert.match(shOk(`grep -c '^listener' ${CONFIG}`), /^4/);
+    assert.match(await roundtrip(U.mqtts), /^hello-/);
+    assert.match(await roundtrip(U.wss), /^hello-/);
+});
+
+// --- password file: what the settings page writes --------------------------------
+
+test('password file plugin: anonymous and wrong password refused, right one accepted', async () => {
+    shOk(`printf '\nplugin ${ADDON}/lib/mosquitto_password_file.so\nplugin_opt_password_file ${ADDON}/etc/passwd\n' >> ${CONFIG} && sed -i 's/^allow_anonymous true/allow_anonymous false/' ${CONFIG}`);
+    shOk(`${BIN}/mosquitto_passwd -c -b ${ADDON}/etc/passwd e2e secret`);
+    shOk(`${BIN}/mosquitto -c ${CONFIG} --test-config`);
+    shOk(`${RC} restart`);
+    await waitForBroker(AUTH);
+    assert.match(await refused(U.mqtt), /Not authorized/);
+    assert.match(await refused(U.mqtt, { username: 'e2e', password: 'wrong' }), /Not authorized/);
+    assert.match(await refused(U.mqtt, { username: 'nobody', password: 'secret' }), /Not authorized/);
+    assert.match(await roundtrip(U.mqtt, AUTH), /^hello-/);
+    assert.match(await roundtrip(U.mqtts, AUTH), /^hello-/, 'TLS plus password');
+    assert.match(await roundtrip(U.ws, AUTH), /^hello-/, 'websockets plus password');
+});
+
+test('user added, password changed and user deleted take effect on reload without a restart', async () => {
+    const pid = brokerPid();
+    shOk(`${BIN}/mosquitto_passwd -b ${ADDON}/etc/passwd second pw2 && ${RC} reload`);
+    await sleep(1000);
+    assert.match(await roundtrip(U.mqtt, { username: 'second', password: 'pw2' }), /^hello-/, 'new user after reload');
+
+    shOk(`${BIN}/mosquitto_passwd -b ${ADDON}/etc/passwd second pw3 && ${RC} reload`);
+    await sleep(1000);
+    assert.match(await refused(U.mqtt, { username: 'second', password: 'pw2' }), /Not authorized/, 'old password after change');
+    assert.match(await roundtrip(U.mqtt, { username: 'second', password: 'pw3' }), /^hello-/, 'new password after change');
+
+    shOk(`${BIN}/mosquitto_passwd -D ${ADDON}/etc/passwd second && ${RC} reload`);
+    await sleep(1000);
+    assert.match(await refused(U.mqtt, { username: 'second', password: 'pw3' }), /Not authorized/, 'deleted user');
+    assert.match(await roundtrip(U.mqtt, AUTH), /^hello-/, 'the other user still works');
+    assert.equal(brokerPid(), pid, 'same broker process, no restart');
+    // the file holds salted hashes, never the passwords
+    const passwd = shOk(`cat ${ADDON}/etc/passwd`);
+    assert.match(passwd, /^e2e:\$7\$/m);
+    assert.doesNotMatch(passwd, /secret/);
+});
+
+// --- bridge: what the Bridges card writes -----------------------------------------------
+
+test('bridge block: the broker bridges local/ to itself over a second listener as remote/', async () => {
+    shOk(`printf '\nlistener 1885 127.0.0.1\n\nconnection e2e-self\naddress 127.0.0.1:1885\nremote_username e2e\nremote_password secret\nremote_clientid e2e-bridge\ncleansession true\nbridge_protocol_version mqttv311\nnotifications false\ntry_private false\ntopic # out 0 local/ remote/\n' >> ${CONFIG}`);
+    shOk(`${BIN}/mosquitto -c ${CONFIG} --test-config`);
+    shOk(`${RC} restart`);
+    await waitForBroker(AUTH);
+    await waitFor(() => /Connecting bridge e2e-self/.test(sh('cat /var/log/messages').out), 'the bridge connection in the syslog', 15000);
+    await sleep(1000);
+    const got = await roundtrip(U.mqtt, AUTH, 'local/bridge/test', { receiveTopic: 'remote/bridge/test' });
+    assert.match(got, /^hello-/);
+});
+
+// --- persistence location: a directory on a USB stick on the CCU ----------------------------
+
+test('persistence_location elsewhere: directory created by the service, retained message survives a restart', async () => {
+    shOk(`sed -i 's|^persistence_location .*|persistence_location /usr/local/tmp/persist-test/|' ${CONFIG} && ${RC} restart`);
+    await waitForBroker(AUTH);
+    shOk('test -d /usr/local/tmp/persist-test');
+    const c = await connect(U.mqtt, AUTH);
+    await c.publishAsync('e2e/retained', 'keep-me', { retain: true, qos: 1 });
+    await new Promise(resolve => c.end(false, resolve));
+    shOk(`${RC} restart`);
+    await waitForBroker(AUTH);
+    shOk('test -s /usr/local/tmp/persist-test/mosquitto.db');
+    const sub = await connect(U.mqtt, AUTH);
+    const got = await new Promise((resolve, reject) => {
+        setTimeout(() => reject(new Error('retained message not delivered')), 5000);
+        sub.on('message', (t, p) => resolve(p.toString()));
+        sub.subscribe('e2e/retained');
+    });
+    sub.end(true);
+    assert.equal(got, 'keep-me');
+    shOk(`sed -i 's|^persistence_location .*|persistence_location ${ADDON}/var/|' ${CONFIG} && ${RC} restart`);
+    await waitForBroker(AUTH);
+});
+
+// --- update, migration, self-update ------------------------------------------------------
+
+test('update with the same package: exit 0, service restarted, configuration and password file preserved', async () => {
+    const before = shOk(`cat ${CONFIG}`);
+    const r = installAddon();
+    assert.equal(r.code, 0, `update_script exit ${r.code}, expected 0\n${r.out}`);
+    await waitForBroker(AUTH);
+    assert.equal(shOk(`cat ${CONFIG}`), before, 'configuration preserved');
+    shOk(`test -f ${ADDON}/etc/passwd && test -f ${ADDON}/var/mosquitto.db`);
+});
+
+test('migration of a 1.5.8 conf.d layout: folded, TLS fragment works, anonymous stays allowed, old libraries gone', async () => {
+    shOk(`${RC} stop; mkdir -p ${ADDON}/etc/conf.d ${ADDON}/lib
+printf 'user root\ninclude_dir ${ADDON}/etc/conf.d/\n' > ${CONFIG}
+echo 'listener 1883 0.0.0.0' > ${ADDON}/etc/conf.d/listener-mqtt.conf
+printf 'listener 1884\nprotocol websockets\n' > ${ADDON}/etc/conf.d/listener-ws.conf
+printf 'listener 8883\nprotocol mqtt\n\ncertfile /etc/config/server.pem\nkeyfile /etc/config/server.pem\n' > ${ADDON}/etc/conf.d/listener-mqtts.conf.disabled
+echo 'log_dest syslog' > ${ADDON}/etc/conf.d/log.conf
+printf 'persistence true\npersistence_location ${ADDON}/var/\n' > ${ADDON}/etc/conf.d/persistence.conf
+touch ${ADDON}/lib/libcrypto.so.1.1 ${ADDON}/lib/libwebsockets.so.8`);
+    const r = installAddon();
+    assert.equal(r.code, 0, `update_script exit ${r.code}\n${r.out}`);
+    shOk(`test ! -d ${ADDON}/etc/conf.d && test -d ${ADDON}/etc/conf.d.old && test ! -f ${ADDON}/lib/libcrypto.so.1.1`);
+    const conf = shOk(`cat ${CONFIG}`);
+    assert.match(conf, /^listener 1883 0\.0\.0\.0$/m);
+    assert.match(conf, /^listener 8883$/m);
+    assert.match(conf, /^persistence true$/m);
+    assert.match(conf, /^allow_anonymous true$/m, 'Mosquitto 2.x default would lock everyone out');
+    assert.doesNotMatch(conf, /^include_dir/m);
+    await waitForBroker();
+    assert.match(await roundtrip(U.mqtt), /^hello-/, 'anonymous again, 1.5.8 had no auth');
+    assert.match(await roundtrip(U.mqtts), /^hello-/, 'TLS listener from the .disabled fragment');
+});
+
+test('self-update worker: download, checksum, install, restart from a local http server', async () => {
+    shOk('busybox httpd -p 127.0.0.1:8081 -h /dist');
+    // no /bin/install_addon in the container: the worker unpacks and runs update_script itself;
+    // --force because the package is not newer than the installed one
+    const version = shOk(`. ${ADDON}/versions; echo $VERSION_ADDON`).trim();
+    const r = sh(`MOSQUITTO_UPDATE_BASE_URL=http://127.0.0.1:8081 ${ADDON}/bin/mosquitto-update --force ${version}; rc=$?; cat /tmp/mosquitto-update/update.log; cat /tmp/mosquitto-update/state.json; exit $rc`);
+    assert.equal(r.code, 0, `worker exit ${r.code}\n${r.out}`);
+    assert.match(r.out, /"phase":"done"/);
+    assert.match(r.out, /"error":""/);
+    shOk('test ! -f /usr/local/tmp/new_addon.tar.gz && ! ls -d /usr/local/tmp/tmp.* >/dev/null 2>&1');
+    await waitForBroker();
+});
+
+// --- stop and uninstall ----------------------------------------------------------------------
+
+test('stop', async () => {
+    shOk(`${RC} stop`);
+    await sleep(1000);
+    assert.equal(brokerPid(), '', 'no broker process');
+    assert.match(sh(`${RC} status`).out, /"running":false/);
+});
+
+test('uninstall removes the tree, the links and the WebUI button', () => {
+    shOk(`${RC} uninstall`);
+    shOk(`test ! -d ${ADDON} && test ! -e ${RC} && test ! -e /usr/local/etc/config/addons/www/mosquitto`);
+    assert.doesNotMatch(sh('cat /usr/local/etc/config/hm_addons.cfg').out, /^mosquitto /m);
+});

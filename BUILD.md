@@ -33,12 +33,18 @@ another version than package.json (e.g. one the self-update can update to).
 
 ## Tests
 
-- `node test/parser.test.js` — unit test of the mosquitto.conf parser in
-  the settings page (plain node, no dependencies).
-- `test/e2e.sh [dist]` — end-to-end test of the built x86_64 package in a
-  Debian container: OpenCCU-style install and update, broker start,
-  pub/sub, websockets, TLS, password-file plugin with reload, migration of
-  a 1.5.8 `conf.d` layout, self-update worker, uninstall.
+Node.js is a test tool only; nothing of it ships in the addon. `npm install`
+once (the `mqtt` client for the tests), then:
+
+- `npm run test:unit` — `node:test` unit tests of the mosquitto.conf parser in
+  the settings page (`test/parser.test.js`).
+- `npm run test:e2e` — `test/e2e.test.js`: end-to-end test of the built
+  x86_64 package in a Debian container started by the test (needs docker):
+  OpenCCU-style install and update, broker start, pub/sub with the mqtt
+  client and the bundled tools, websockets, TLS, password file (refused
+  anonymous and wrong passwords, add/change/delete on reload), bridge,
+  persistence location, migration of a 1.5.8 `conf.d` layout, self-update
+  worker, stop, uninstall. `KEEP=1` keeps the container afterwards.
 
 ## Releases
 

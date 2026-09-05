@@ -17,7 +17,7 @@ jobs:
 
       - name: Shell script syntax
         run: |
-          bash -n build.sh build_addon.sh build_release_body.sh test/e2e.sh test/e2e-inner.sh
+          bash -n build.sh build_addon.sh build_release_body.sh
           for f in build_in_container.sh addon_files/update_script \
                    addon_files/mosquitto/bin/mosquitto-service addon_files/mosquitto/bin/mosquitto-update; do
             sh -n "$f"
@@ -28,16 +28,16 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck >/dev/null
           shellcheck -S error -s sh build_in_container.sh addon_files/update_script \
               addon_files/mosquitto/bin/mosquitto-service addon_files/mosquitto/bin/mosquitto-update
-          shellcheck -S error build.sh build_addon.sh build_release_body.sh test/e2e.sh test/e2e-inner.sh
+          shellcheck -S error build.sh build_addon.sh build_release_body.sh
 
       - name: JavaScript syntax
         run: |
-          for f in addon_files/mosquitto/www/js/script.js build_licenses.js update_versions.js test/parser.test.js; do
+          for f in addon_files/mosquitto/www/js/script.js build_licenses.js update_versions.js test/*.js; do
             node --check "$f"
           done
 
       - name: mosquitto.conf parser unit test
-        run: node test/parser.test.js
+        run: npm run test:unit
 
   build:
     needs: check
@@ -81,4 +81,6 @@ jobs:
           path: dist
 
       - name: End-to-end test (x86_64 package in a Debian container)
-        run: test/e2e.sh dist
+        run: |
+          npm install --no-package-lock --no-audit --no-fund
+          npm run test:e2e

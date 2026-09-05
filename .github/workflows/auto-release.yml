@@ -76,7 +76,9 @@ jobs:
 
       - name: End-to-end test (x86_64 package)
         if: steps.bump.outcome == 'success'
-        run: test/e2e.sh dist
+        run: |
+          npm install --no-package-lock --no-audit --no-fund
+          npm run test:e2e
 
       - name: Commit and push the version bump
         if: steps.bump.outcome == 'success'

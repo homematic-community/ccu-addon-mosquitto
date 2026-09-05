@@ -32,9 +32,10 @@ under `/usr/local/addons/mosquitto`.
   - `www/` — settings page (tclsh CGIs + one HTML + one CSS + one JS, no
     frameworks), `lib/` — shared tcl helpers (session check, query string)
 - `build_in_container.sh` — runs inside the Alpine build container.
-- `test/e2e.sh` — end-to-end test of the built x86_64 package in a Debian
-  container (needs docker); `test/parser.test.js` — unit test of the
-  mosquitto.conf parser in `www/js/script.js` (plain node).
+- `test/` — `node:test` suites (Node.js is a test tool only, nothing of it
+  ships): `parser.test.js` (unit, the mosquitto.conf model of the page),
+  `e2e.test.js` (the built x86_64 package in a Debian container the test
+  starts itself; broker checks with the `mqtt` npm client; needs docker).
 - `update_versions.js` — checks the newest Mosquitto release tag against
   the pinned version and bumps `package.json` (used by `auto-release.yml`).
 - CI: `.github/workflows/ci.yml` (syntax, 3-arch build, e2e), `build.yml`
