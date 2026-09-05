@@ -21,6 +21,8 @@ user management, bridges, CCU firewall status, logging, persistence
 process control, self-update; CI, e2e and parser tests, automatic
 releases. **`2.1.2+0` was released on 2026-09-05** (task 10); from now on
 `auto-release.yml` publishes a new package for every Mosquitto release.
+`2.1.2+1` (2026-09-05) added per-listener authentication (task 17) and a
+flatter top bar.
 
 ## Contents
 
@@ -40,7 +42,7 @@ releases. **`2.1.2+0` was released on 2026-09-05** (task 10); from now on
 - [14. Follow-ups and ideas](#14-follow-ups-and-ideas)
 - 15. Persistence on a USB stick, configurable in the UI ✅ [archived](roadmap-archive/task-15.md)
 - 16. Tests in Node.js: unit, CGI integration, web UI end to end, coverage ✅ [archived](roadmap-archive/task-16.md)
-- [17. Per-listener authentication](#17-per-listener-authentication)
+- 17. Per-listener authentication ✅ [archived](roadmap-archive/task-17.md)
 - [Out of scope](#out-of-scope)
 
 ## 14. Follow-ups and ideas
@@ -58,38 +60,6 @@ Not planned, collected while working:
 - English UI strings (the page is German like RedMatic's).
 - The self-update modal could show the release notes inline (the GitHub
   releases API has the body).
-
-## 17. Per-listener authentication
-
-Maintainer's wish (2026-09-05). Common setup: a loopback listener
-(`127.0.0.1:1883`) for the CCU's own clients (Node-RED, hm2mqtt, …)
-without authentication, and an external listener that requires
-username/password. Today the "Anonyme Verbindungen" select is global and
-the page writes one `allow_anonymous` for the whole broker.
-
-- Mosquitto 2.1 has `listener_allow_anonymous [ true | false ]`: a
-  listener-scoped override of the global `allow_anonymous`, no
-  `per_listener_settings` needed (that one is deprecated and would also
-  scope the password plugin per listener — not wanted). The 2.1.2 binary
-  in the package knows the option (`strings` on the test box), the
-  man page documents it under the listener options.
-- UI: keep the global select as the default and add a per-listener
-  choice on each listener card — "wie global / erlaubt / nicht erlaubt"
-  — which maps to the absence or presence of `listener_allow_anonymous`
-  in that listener block. The password plugin block stays global, so
-  authenticated clients can still log in on a listener that also allows
-  anonymous connections.
-- Parser (`www/js/script.js`): `listener_allow_anonymous` becomes a
-  managed listener key (`test/parser.test.js` cases for round trip,
-  missing, and `per_listener_settings true` files from old installs —
-  those should be left verbatim and shown with a hint, not rewritten).
-- The auth warning ("no password file and no anonymous connections")
-  has to be evaluated per listener; the firewall card is unaffected.
-- Default config: unchanged (one listener, global setting). Document in
-  the README's authentication section with the loopback/external example.
-- Prior art: [she](https://github.com/hobbyquaker/she) models
-  `allow_anonymous` per listener block in its `mosquitto-conf.js` and
-  shows a card per listener — same shape as our listener cards.
 
 ## Out of scope
 

@@ -23,3 +23,4 @@ index (marked ✅ there, linking here).
 - [task-13.md](task-13.md) — CCU firewall: show blocked ports, open them from the UI ✅ 2026-09-05
 - [task-15.md](task-15.md) — Persistence on a USB stick, configurable in the UI ✅ 2026-09-05
 - [task-16.md](task-16.md) — Tests in Node.js: unit, CGI integration, web UI end to end, coverage ✅ 2026-09-05
+- [task-17.md](task-17.md) — Per-listener authentication ✅ 2026-09-05 (`listener_allow_anonymous`, released as 2.1.2+1)
