@@ -108,13 +108,18 @@ code=`curl -s -o /dev/null -w '%{http_code}' --max-time 5 -N \
     http://127.0.0.1:1884/`
 [ "$code" = "101" ] && ok "websocket upgrade answered 101" || fail "websocket upgrade answered '$code'"
 
-# --- configuration: TLS listener + password file (what the settings page writes) ----
-log "TLS listener and password-file plugin"
-cat >> $CONFIG <<EOL
+log "TLS listeners of the default configuration (8883 mqtt, 8884 websockets, CCU certificate)"
+grep -q '^listener 8883' $CONFIG && grep -q '^listener 8884' $CONFIG && ok "default config has the TLS listeners" || fail "default config lacks the TLS listeners"
+roundtrip e2e/tls-default -p 8883 --cafile /etc/config/server.pem --insecure && ok "TLS round trip on 8883 with the CCU certificate" || fail "TLS round trip on 8883"
+code=`curl -s -o /dev/null -w '%{http_code}' --max-time 5 -N -k \
+    -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" \
+    -H "Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==" -H "Sec-WebSocket-Protocol: mqtt" \
+    https://127.0.0.1:8884/`
+[ "$code" = "101" ] && ok "websocket upgrade over TLS on 8884" || fail "websocket upgrade over TLS answered '$code'"
 
-listener 8883
-certfile /etc/config/server.pem
-keyfile /etc/config/server.pem
+# --- configuration: password file (what the settings page writes) ------------------
+log "password-file plugin"
+cat >> $CONFIG <<EOL
 
 plugin $ADDON_DIR/lib/mosquitto_password_file.so
 plugin_opt_password_file $ADDON_DIR/etc/passwd
@@ -147,6 +152,31 @@ $RC reload >/dev/null || die "reload"
 sleep 1
 roundtrip e2e/second -u second -P pw2 && ok "new user works after reload" || fail "new user after reload"
 [ "`broker_pid`" = "$pid_before" ] && ok "same broker process (pid $pid_before)" || fail "broker was restarted by reload"
+
+# --- bridge (what the Bridges card writes): the broker bridges itself over a second listener ----
+log "bridge block: local/# out to 127.0.0.1:1885 with prefix remote/"
+cat >> $CONFIG <<EOL
+
+listener 1885 127.0.0.1
+
+connection e2e-self
+address 127.0.0.1:1885
+remote_username e2e
+remote_password secret
+remote_clientid e2e-bridge
+cleansession true
+bridge_protocol_version mqttv311
+notifications false
+try_private false
+topic # out 0 local/ remote/
+EOL
+$BIN/mosquitto -c $CONFIG --test-config >/dev/null 2>&1 && ok "--test-config accepts the bridge config" || fail "--test-config rejects the bridge config"
+$RC restart || die "restart with bridge"
+wait_for_broker_auth || die "broker not running after the bridge restart"
+sleep 2
+out=`timeout 15 $BIN/mosquitto_sub -h 127.0.0.1 -u e2e -P secret -C 1 -W 10 -t remote/bridge/test & sleep 1; $BIN/mosquitto_pub -h 127.0.0.1 -u e2e -P secret -t local/bridge/test -m "over-the-bridge"; wait`
+[ "$out" = "over-the-bridge" ] && ok "message crossed the bridge (local/ -> remote/)" || fail "bridge did not forward ('$out')"
+grep -q "Connecting bridge e2e-self" /var/log/messages && ok "bridge connection logged" || fail "no bridge connection in syslog"
 
 # --- update (the OpenCCU live path) --------------------------------------------------
 log "update with the same package (update_script must exit 0 and restart the service)"

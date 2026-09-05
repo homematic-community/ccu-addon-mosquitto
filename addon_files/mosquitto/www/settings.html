@@ -47,7 +47,7 @@
                     <span id="status-spinner" class="spinner"></span>
                     <span><span id="status"></span><br><span id="status-detail"></span></span>
                 </div>
-                <div class="help">Auf einer CCU3 müssen die Listener-Ports in der Firewall freigegeben werden (Einstellungen &gt; Systemsteuerung &gt; Firewall konfigurieren &gt; Port-Freigabe, z.&nbsp;B. <code>1883;1884</code>).</div>
+                <div id="status-error" class="alert alert-danger hidden"></div>
             </div>
         </div>
 
@@ -57,6 +57,23 @@
                 <div id="listeners"></div>
                 <button id="listener-add" type="button" class="btn btn-primary">+ Listener hinzufügen</button>
                 <div class="help mt-2">Übliche Ports: 1883 MQTT, 8883 MQTT über TLS, 1884 WebSockets, 8884 WebSockets über TLS. Bind-Adresse leer = alle Adressen.</div>
+                <div id="firewall" class="mt-2 hidden">
+                    <div class="form-row">
+                        <span id="firewall-text"></span>
+                        <button id="firewall-open" type="button" class="btn btn-warning hidden">Listener-Ports in der CCU-Firewall freigeben</button>
+                        <span id="firewall-spinner" class="spinner hidden"></span>
+                    </div>
+                    <div class="help">Die Freigabe trägt die Ports in die Port-Freigabe der CCU-Firewall ein (Einstellungen &gt; Systemsteuerung &gt; Firewall konfigurieren) - so, wie es die Firewall-Seite selbst tut.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <span class="card-title">Bridges <a class="help" href="https://mosquitto.org/man/mosquitto-conf-5.html#bridges" target="_blank" title="Dokumentation">?</a></span>
+                <div id="bridges"></div>
+                <button id="bridge-add" type="button" class="btn btn-primary">+ Bridge hinzufügen</button>
+                <div class="help mt-2">Eine Bridge verbindet diesen Broker mit einem anderen Broker. Topics: eine Zeile pro <code>topic</code>-Direktive, z.&nbsp;B. <code># both 0</code> (alles in beide Richtungen) oder <code>sensor/# out 0 local/ remote/</code> (Muster, Richtung in/out/both, QoS, lokales und entferntes Präfix).</div>
             </div>
         </div>
 

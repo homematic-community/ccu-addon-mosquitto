@@ -5,10 +5,11 @@
 //   node test/parser.test.js
 
 const assert = require('assert');
+const fs = require('fs');
 const path = require('path');
 
 const model = require(path.join(__dirname, '..', 'addon_files', 'mosquitto', 'www', 'js', 'script.js'));
-const { parse, load, serialise, state, PASSWD_FILE, ACL_FILE, PLUGIN_PASSWD, CCU_CERT, ADDON_CERT, ADDON_KEY } = model;
+const { parse, load, serialise, state, newListener, newBridge, PASSWD_FILE, PLUGIN_PASSWD, CCU_CERT, ADDON_CERT, ADDON_KEY } = model;
 
 let passed = 0;
 function test(name, fn) {
@@ -23,37 +24,20 @@ function test(name, fn) {
     }
 }
 
-const DEFAULT = `# Mosquitto configuration - ccu-addon-mosquitto
-user root
+// the shipped default configuration is the primary round-trip fixture
+const DEFAULT = fs.readFileSync(path.join(__dirname, '..', 'addon_files', 'mosquitto', 'etc', 'mosquitto.conf.default'), 'utf8');
 
-listener 1883
-
-listener 1884
-protocol websockets
-
-allow_anonymous true
-
-persistence true
-persistence_location /usr/local/addons/mosquitto/var/
-autosave_interval 1800
-
-log_dest syslog
-log_type error
-log_type warning
-log_type notice
-log_type information
-connection_messages true
-`;
-
-test('round trip of the default config is byte-identical', () => {
+test('round trip of the shipped default config is byte-identical', () => {
     load(DEFAULT);
     assert.strictEqual(serialise(), DEFAULT);
 });
 
 test('default config is parsed into the expected state', () => {
     load(DEFAULT);
-    assert.strictEqual(state.listeners.length, 2);
-    assert.deepStrictEqual(state.listeners.map(l => [l.port, l.protocol, l.tls]), [['1883', 'mqtt', false], ['1884', 'websockets', false]]);
+    assert.deepStrictEqual(state.listeners.map(l => [l.port, l.protocol, l.tls]),
+        [['1883', 'mqtt', false], ['1884', 'websockets', false], ['8883', 'mqtt', true], ['8884', 'websockets', true]]);
+    assert.strictEqual(state.certSource, 'ccu');
+    assert.strictEqual(state.tlsVersion, '');
     assert.strictEqual(state.allowAnonymous, true);
     assert.strictEqual(state.persistence, true);
     assert.strictEqual(state.autosaveInterval, '1800');
@@ -61,30 +45,40 @@ test('default config is parsed into the expected state', () => {
     assert.deepStrictEqual(state.logTypes, ['error', 'warning', 'notice', 'information']);
     assert.strictEqual(state.passwordFile, '');
     assert.strictEqual(state.aclFile, '');
+    assert.deepStrictEqual(state.bridges, []);
 });
 
 test('adding a TLS listener writes cert lines from the CCU certificate', () => {
     load(DEFAULT);
-    state.listeners.push({ type: 'listener', port: '8883', bind: '', protocol: 'mqtt', tls: true, certfile: '', keyfile: '', tls_version: '', max_connections: '', extras: [] });
+    const l = newListener('8885');
+    l.tls = true;
+    state.listeners.push(l);
     const out = serialise();
-    assert.ok(out.includes('\nlistener 8883\ncertfile ' + CCU_CERT + '\nkeyfile ' + CCU_CERT + '\n'), out);
-    // and it parses back
+    assert.ok(out.endsWith('\nlistener 8885\ncertfile ' + CCU_CERT + '\nkeyfile ' + CCU_CERT + '\n'), out);
     load(out);
-    assert.strictEqual(state.listeners.length, 3);
-    assert.strictEqual(state.listeners[2].tls, true);
+    assert.strictEqual(state.listeners.length, 5);
+    assert.strictEqual(state.listeners[4].tls, true);
     assert.strictEqual(state.certSource, 'ccu');
 });
 
 test('cert source addon + tls_version apply to every TLS listener', () => {
     load(DEFAULT);
-    state.listeners[0].tls = true;
     state.certSource = 'addon';
     state.tlsVersion = 'tlsv1.2';
     const out = serialise();
-    assert.ok(out.includes('listener 1883\ncertfile ' + ADDON_CERT + '\nkeyfile ' + ADDON_KEY + '\ntls_version tlsv1.2\n'), out);
+    assert.ok(out.includes('listener 8883\ncertfile ' + ADDON_CERT + '\nkeyfile ' + ADDON_KEY + '\ntls_version tlsv1.2\n'), out);
+    assert.ok(out.includes('listener 8884\nprotocol websockets\ncertfile ' + ADDON_CERT + '\nkeyfile ' + ADDON_KEY + '\ntls_version tlsv1.2\n'), out);
+    assert.ok(!out.includes(CCU_CERT), 'no CCU cert left');
     load(out);
     assert.strictEqual(state.certSource, 'addon');
     assert.strictEqual(state.tlsVersion, 'tlsv1.2');
+});
+
+test('switching TLS off a listener drops its cert lines', () => {
+    load(DEFAULT);
+    state.listeners[2].tls = false;
+    const out = serialise();
+    assert.ok(out.includes('\nlistener 8883\n\nlistener 8884\n'), out);
 });
 
 test('removing a listener drops its whole block including unknown sub-keys', () => {
@@ -92,15 +86,16 @@ test('removing a listener drops its whole block including unknown sub-keys', () 
     assert.deepStrictEqual(state.listeners[1].extras.filter(x => x.trim()), ['mount_point ws/', 'socket_domain ipv4']);
     state.listeners.splice(1, 1);
     const out = serialise();
-    assert.ok(!out.includes('1884') && !out.includes('mount_point'), out);
+    assert.ok(!/^listener 1884/m.test(out) && !out.includes('mount_point') && !out.includes('socket_domain'), out);
     assert.ok(out.includes('listener 1883\n'), out);
+    assert.strictEqual((out.match(/^listener /gm) || []).length, 3);
 });
 
-test('unknown listener sub-keys stay inside their block', () => {
-    load('listener 1883\nmax_qos 1\n\nlistener 1884\nprotocol websockets\nhttp_dir /tmp/www\n\nallow_anonymous true\n');
+test('unknown listener sub-keys stay inside their block, file layout is kept', () => {
+    const conf = 'listener 1883\nmax_qos 1\n\nlistener 1884\nprotocol websockets\nhttp_dir /tmp/www\n\nallow_anonymous true\n';
+    load(conf);
     state.listeners[0].bind = '127.0.0.1';
-    const out = serialise();
-    assert.strictEqual(out, 'listener 1883 127.0.0.1\nmax_qos 1\n\nlistener 1884\nprotocol websockets\nhttp_dir /tmp/www\n\nallow_anonymous true\n');
+    assert.strictEqual(serialise(), conf.replace('listener 1883', 'listener 1883 127.0.0.1'));
 });
 
 test('password file plugin block is written, parsed and removed', () => {
@@ -171,6 +166,59 @@ test('a 1.5.8 migrated file with bind address and comments survives', () => {
 test('parse keeps CRLF files readable', () => {
     const items = parse('listener 1883\r\nallow_anonymous true\r\n');
     assert.strictEqual(items.length, 2);
+});
+
+// --- bridges (task 11) -------------------------------------------------------------
+
+const BRIDGE = 'listener 1883\n\nconnection cloud\naddress broker.example.org:8883 backup.example.org:8883\nremote_username ccu\nremote_password secret\nremote_clientid ccu-bridge\ncleansession true\nbridge_protocol_version mqttv50\nbridge_cafile /etc/ssl/certs/ca.pem\nbridge_insecure true\nnotifications false\ntry_private false\ntopic # both 0\ntopic sensor/# out 1 local/ remote/\nrestart_timeout 10 60\n\nallow_anonymous true\n';
+
+test('bridge block is parsed', () => {
+    load(BRIDGE);
+    assert.strictEqual(state.bridges.length, 1);
+    const b = state.bridges[0];
+    assert.strictEqual(b.name, 'cloud');
+    assert.strictEqual(b.address, 'broker.example.org:8883 backup.example.org:8883');
+    assert.strictEqual(b.remote_username, 'ccu');
+    assert.strictEqual(b.remote_password, 'secret');
+    assert.strictEqual(b.cleansession, 'true');
+    assert.strictEqual(b.bridge_protocol_version, 'mqttv50');
+    assert.strictEqual(b.bridge_cafile, '/etc/ssl/certs/ca.pem');
+    assert.strictEqual(b.bridge_insecure, 'true');
+    assert.strictEqual(b.notifications, 'false');
+    assert.strictEqual(b.try_private, 'false');
+    assert.deepStrictEqual(b.topics, ['# both 0', 'sensor/# out 1 local/ remote/']);
+    assert.deepStrictEqual(b.extras.filter(x => x.trim()), ['restart_timeout 10 60']);
+    assert.strictEqual(state.listeners.length, 1, 'connection ends the listener block');
+    assert.strictEqual(state.allowAnonymous, true, 'a global key ends the bridge block');
+});
+
+test('bridge round trip is byte-identical', () => {
+    load(BRIDGE);
+    assert.strictEqual(serialise(), BRIDGE);
+});
+
+test('bridge edits are written, a new bridge is appended, removal drops the block', () => {
+    load(BRIDGE);
+    state.bridges[0].topics = ['# in 0'];
+    state.bridges[0].remote_password = "it's secret";
+    let out = serialise();
+    assert.ok(out.includes("remote_password it's secret\n"), out);
+    assert.ok(out.includes('try_private false\ntopic # in 0\nrestart_timeout 10 60\n'), out);
+    assert.ok(!out.includes('sensor/#'), out);
+
+    const b = newBridge('second');
+    b.address = '10.0.0.2:1883';
+    b.topics = ['x/# out 0'];
+    state.bridges.push(b);
+    out = serialise();
+    assert.ok(out.endsWith('\nconnection second\naddress 10.0.0.2:1883\ntopic x/# out 0\n'), out);
+    load(out);
+    assert.strictEqual(state.bridges.length, 2);
+
+    state.bridges.splice(0, 1);
+    out = serialise();
+    assert.ok(!out.includes('connection cloud') && !out.includes('restart_timeout'), out);
+    assert.ok(out.includes('connection second'), out);
 });
 
 console.log(process.exitCode ? 'parser tests FAILED' : `parser tests passed (${passed})`);

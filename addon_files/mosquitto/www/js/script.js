@@ -25,13 +25,14 @@
     //   {type: 'line', text}                 comments, blanks, unmanaged keys
     //   {type: 'global', key, value}         a managed global key
     //   {type: 'listener', ...}              a listener block (line + sub-keys)
+    //   {type: 'bridge', ...}                a connection block (bridge)
     //   {type: 'plugin', path, opts, lines}  a plugin block (plugin + plugin_opt_*)
     // serialise() writes the items back in order, replacing the managed ones
     // with the current state, dropping removed ones and appending new ones.
 
-    // keys known to be global - they end a listener block. Everything else after
-    // a listener line stays inside its block, so a hand-written listener option
-    // this page does not know is never moved to another listener.
+    // keys known to be global - they end a listener or bridge block. Everything
+    // else after a listener/connection line stays inside its block, so a
+    // hand-written option this page does not know is never moved elsewhere.
     const GLOBAL_KEYS = new Set([
         'allow_anonymous', 'persistence', 'persistence_location', 'persistence_file', 'autosave_interval',
         'autosave_on_changes', 'log_dest', 'log_type', 'log_timestamp', 'log_timestamp_format', 'log_facility',
@@ -44,6 +45,9 @@
     ]);
     const MANAGED_GLOBALS = ['allow_anonymous', 'persistence', 'autosave_interval', 'connection_messages', 'log_type', 'password_file', 'acl_file'];
     const LISTENER_KEYS = ['protocol', 'certfile', 'keyfile', 'tls_version', 'max_connections'];
+    // bridge keys with one value (topic lines are collected separately)
+    const BRIDGE_KEYS = ['address', 'remote_username', 'remote_password', 'remote_clientid', 'cleansession',
+        'bridge_protocol_version', 'bridge_cafile', 'bridge_insecure', 'notifications', 'try_private'];
 
     function splitLine(line) {
         const trimmed = line.trim();
@@ -53,11 +57,21 @@
         return { key: trimmed.slice(0, space), value: trimmed.slice(space + 1).trim() };
     }
 
+    function newListener(port) {
+        return { type: 'listener', port, bind: '', protocol: 'mqtt', tls: false, certfile: '', keyfile: '', tls_version: '', max_connections: '', extras: [] };
+    }
+
+    function newBridge(name) {
+        return { type: 'bridge', name, address: '', remote_username: '', remote_password: '', remote_clientid: '',
+            cleansession: '', bridge_protocol_version: '', bridge_cafile: '', bridge_insecure: '', notifications: '',
+            try_private: '', topics: [], extras: [] };
+    }
+
     function parse(text) {
         const lines = text.replace(/\r/g, '').split('\n');
         if (lines.length && lines[lines.length - 1] === '') lines.pop();
         const items = [];
-        let current = null; // open listener or plugin block
+        let current = null; // open listener, bridge or plugin block
 
         for (const line of lines) {
             const kv = splitLine(line);
@@ -75,8 +89,13 @@
             }
             if (kv && kv.key === 'listener') {
                 const parts = kv.value.split(/\s+/);
-                current = { type: 'listener', port: parts[0], bind: parts[1] || '', protocol: 'mqtt',
-                    certfile: '', keyfile: '', tls_version: '', max_connections: '', extras: [] };
+                current = newListener(parts[0]);
+                current.bind = parts[1] || '';
+                items.push(current);
+                continue;
+            }
+            if (kv && kv.key === 'connection') {
+                current = newBridge(kv.value);
                 items.push(current);
                 continue;
             }
@@ -87,6 +106,12 @@
             }
             if (current && current.type === 'listener' && !(kv && GLOBAL_KEYS.has(kv.key))) {
                 if (kv && LISTENER_KEYS.includes(kv.key)) current[kv.key] = kv.value;
+                else current.extras.push(line);
+                continue;
+            }
+            if (current && current.type === 'bridge' && !(kv && GLOBAL_KEYS.has(kv.key))) {
+                if (kv && kv.key === 'topic') current.topics.push(kv.value);
+                else if (kv && BRIDGE_KEYS.includes(kv.key)) current[kv.key] = kv.value;
                 else current.extras.push(line);
                 continue;
             }
@@ -108,6 +133,7 @@
     const state = {
         items: [],
         listeners: [],
+        bridges: [],
         allowAnonymous: false,
         persistence: false,
         autosaveInterval: '',
@@ -125,6 +151,7 @@
     function load(text) {
         state.items = parse(text);
         state.listeners = state.items.filter(i => i.type === 'listener');
+        state.bridges = state.items.filter(i => i.type === 'bridge');
         for (const l of state.listeners) {
             l.tls = !!(l.certfile || l.keyfile);
         }
@@ -174,8 +201,16 @@
         }
     }
 
-    // listenerLines(l, isNew): the block's lines; the trailing blank line is
-    // kept as it was in the file (always for a new listener)
+    // trailing blank line of a block: kept as it was in the file, always for a new block
+    function withExtras(out, extras, isNew) {
+        const rest = extras.slice();
+        const hadBlank = rest.length > 0 && rest[rest.length - 1].trim() === '';
+        while (rest.length && rest[rest.length - 1].trim() === '') rest.pop();
+        out.push(...rest);
+        if (hadBlank || isNew) out.push('');
+        return out;
+    }
+
     function listenerLines(l, isNew) {
         const out = ['listener ' + l.port + (l.bind ? ' ' + l.bind : '')];
         if (l.protocol === 'websockets') out.push('protocol websockets');
@@ -186,12 +221,18 @@
             if (state.tlsVersion) out.push('tls_version ' + state.tlsVersion);
         }
         if (l.max_connections !== '' && l.max_connections !== undefined) out.push('max_connections ' + l.max_connections);
-        const extras = l.extras.slice();
-        const hadBlank = extras.length > 0 && extras[extras.length - 1].trim() === '';
-        while (extras.length && extras[extras.length - 1].trim() === '') extras.pop();
-        out.push(...extras);
-        if (hadBlank || isNew) out.push('');
-        return out;
+        return withExtras(out, l.extras, isNew);
+    }
+
+    function bridgeLines(b, isNew) {
+        const out = ['connection ' + b.name];
+        for (const key of BRIDGE_KEYS) {
+            if (b[key] !== '' && b[key] !== undefined) out.push(key + ' ' + b[key]);
+        }
+        for (const t of b.topics) {
+            if (t.trim()) out.push('topic ' + t.trim());
+        }
+        return withExtras(out, b.extras, isNew);
     }
 
     // what mosquitto assumes when a key is absent - such keys are only written
@@ -219,6 +260,7 @@
             else out.push(key + ' ' + v);
         };
         const pluginBlock = (path, optKey, optValue) => [`plugin ${path}`, `plugin_opt_${optKey} ${optValue}`, ''];
+        const blank = () => { if (out.length && out[out.length - 1].trim() !== '') out.push(''); };
         let havePasswd = false;
         let haveAcl = false;
 
@@ -229,6 +271,8 @@
                 if (!written.has(i.key)) writeGlobal(i.key);
             } else if (i.type === 'listener') {
                 if (state.listeners.includes(i)) out.push(...listenerLines(i, false));
+            } else if (i.type === 'bridge') {
+                if (state.bridges.includes(i)) out.push(...bridgeLines(i, false));
             } else if (i.type === 'plugin') {
                 if (i.path.endsWith('/mosquitto_password_file.so')) {
                     if (state.passwordFile && !havePasswd) { out.push(...pluginBlock(PLUGIN_PASSWD, 'password_file', state.passwordFile)); havePasswd = true; }
@@ -243,24 +287,17 @@
         const missing = ['allow_anonymous', 'persistence', 'autosave_interval', 'connection_messages', 'log_type']
             .filter(k => !written.has(k) && globals[k] !== null && globals[k] !== GLOBAL_DEFAULTS[k]);
         if (missing.length) {
-            if (out.length && out[out.length - 1].trim() !== '') out.push('');
+            blank();
             missing.forEach(writeGlobal);
         }
-        // new listeners
         for (const l of state.listeners) {
-            if (!state.items.includes(l)) {
-                if (out.length && out[out.length - 1].trim() !== '') out.push('');
-                out.push(...listenerLines(l, true));
-            }
+            if (!state.items.includes(l)) { blank(); out.push(...listenerLines(l, true)); }
         }
-        if (state.passwordFile && !havePasswd) {
-            if (out.length && out[out.length - 1].trim() !== '') out.push('');
-            out.push(...pluginBlock(PLUGIN_PASSWD, 'password_file', state.passwordFile));
+        for (const b of state.bridges) {
+            if (!state.items.includes(b)) { blank(); out.push(...bridgeLines(b, true)); }
         }
-        if (state.aclFile && !haveAcl) {
-            if (out.length && out[out.length - 1].trim() !== '') out.push('');
-            out.push(...pluginBlock(PLUGIN_ACL, 'acl_file', state.aclFile));
-        }
+        if (state.passwordFile && !havePasswd) { blank(); out.push(...pluginBlock(PLUGIN_PASSWD, 'password_file', state.passwordFile)); }
+        if (state.aclFile && !haveAcl) { blank(); out.push(...pluginBlock(PLUGIN_ACL, 'acl_file', state.aclFile)); }
         // collapse runs of blank lines
         const result = [];
         for (const line of out) {
@@ -273,7 +310,8 @@
 
     // loaded by node for the unit test: export the model, skip the page
     if (typeof document === 'undefined') {
-        module.exports = { parse, load, serialise, state, currentCert, PASSWD_FILE, ACL_FILE, PLUGIN_PASSWD, PLUGIN_ACL, CCU_CERT, ADDON_CERT, ADDON_KEY };
+        module.exports = { parse, load, serialise, state, currentCert, newListener, newBridge,
+            PASSWD_FILE, ACL_FILE, PLUGIN_PASSWD, PLUGIN_ACL, CCU_CERT, ADDON_CERT, ADDON_KEY };
         return;
     }
 
@@ -356,6 +394,12 @@
         return node;
     }
 
+    function select(options, value, cls = 'w-md') {
+        const node = el('select', { class: cls }, options.map(([v, text]) => el('option', { value: v, text })));
+        node.value = value;
+        return node;
+    }
+
     // tabs
     function showTab(name) {
         $$('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + name));
@@ -388,6 +432,8 @@
                 // re-parse what was written so the items reflect the file
                 load(text);
                 renderListeners();
+                renderBridges();
+                renderFirewall();
             } else {
                 toast(result.replace(/^error:\s*/, 'Nicht gespeichert: '), 'danger', 8000);
                 await loadConfig();
@@ -401,6 +447,8 @@
 
     function render() {
         renderListeners();
+        renderBridges();
+        renderFirewall();
         $('#cert-source').value = state.certSource;
         $('#cert-certfile').value = state.certSource === 'custom' ? state.certfile : '';
         $('#cert-keyfile').value = state.certSource === 'custom' ? state.keyfile : '';
@@ -418,6 +466,8 @@
         $('#autosave-interval').value = state.autosaveInterval;
     }
 
+    // --- listeners --------------------------------------------------------------------
+
     function renderListeners() {
         const container = $('#listeners');
         container.innerHTML = '';
@@ -427,11 +477,7 @@
         state.listeners.forEach((l, idx) => {
             const port = el('input', { type: 'number', class: 'w-sm', min: 1, max: 65535, value: l.port, placeholder: 'Port' });
             const bind = el('input', { type: 'text', class: 'w-md', value: l.bind, placeholder: 'alle Adressen' });
-            const protocol = el('select', { class: 'w-md' }, [
-                el('option', { value: 'mqtt', text: 'MQTT' }),
-                el('option', { value: 'websockets', text: 'WebSockets' })
-            ]);
-            protocol.value = l.protocol === 'websockets' ? 'websockets' : 'mqtt';
+            const protocol = select([['mqtt', 'MQTT'], ['websockets', 'WebSockets']], l.protocol === 'websockets' ? 'websockets' : 'mqtt');
             const tls = el('input', { type: 'checkbox' });
             tls.checked = l.tls;
             const maxConn = el('input', { type: 'number', class: 'w-sm', min: -1, value: l.max_connections, placeholder: 'unbegrenzt' });
@@ -454,6 +500,7 @@
             };
             [port, bind, protocol, tls, maxConn].forEach(i => i.addEventListener('change', apply));
             const extras = l.extras.filter(x => x.trim() && !x.trim().startsWith('#')).map(x => x.trim());
+            const fw = el('span', { class: 'help fw-status', 'data-port': l.port });
             container.appendChild(el('div', { class: 'listener' }, [
                 el('div', { class: 'form-row' }, [
                     el('label', { text: 'Port' }), port,
@@ -461,6 +508,7 @@
                     el('label', { text: 'Protokoll' }), protocol,
                     el('label', {}, [tls, 'TLS']),
                     el('label', { text: 'Max. Verbindungen', title: 'max_connections' }), maxConn,
+                    fw,
                     el('span', { class: 'grow' }),
                     remove
                 ]),
@@ -469,18 +517,163 @@
                     : el('span')
             ]));
         });
+        applyFirewallStatus();
     }
 
     $('#listener-add').addEventListener('click', () => {
         const used = new Set(state.listeners.map(l => String(l.port)));
-        const port = ['8883', '8884', '1883', '1884'].find(p => !used.has(p)) || '';
-        state.listeners.push({ type: 'listener', port, bind: '', protocol: port === '8884' || port === '1884' ? 'websockets' : 'mqtt',
-            tls: port.startsWith('88'), certfile: '', keyfile: '', tls_version: '', max_connections: '', extras: [] });
+        const port = ['1883', '8883', '1884', '8884'].find(p => !used.has(p)) || '';
+        const l = newListener(port);
+        l.protocol = port === '8884' || port === '1884' ? 'websockets' : 'mqtt';
+        l.tls = port.startsWith('88');
+        state.listeners.push(l);
         renderListeners();
         if (port) save();
     });
 
-    // certificate
+    // --- firewall (task 13) ---------------------------------------------------------------
+
+    let firewall = null; // {available, mode, userports}
+
+    function blockedPorts() {
+        if (!firewall || !firewall.available || firewall.mode === 'MOST_OPEN') return [];
+        const open = new Set((firewall.userports || []).map(String));
+        return state.listeners.map(l => String(l.port)).filter(p => p && !open.has(p));
+    }
+
+    function applyFirewallStatus() {
+        $$('.fw-status').forEach(span => {
+            const port = span.dataset.port;
+            if (!firewall || !firewall.available) { span.textContent = ''; return; }
+            const blocked = blockedPorts().includes(port);
+            span.textContent = blocked ? 'Firewall: gesperrt' : 'Firewall: offen';
+            span.style.color = blocked ? '#dc3545' : 'darkgreen';
+        });
+    }
+
+    function renderFirewall() {
+        const box = $('#firewall');
+        if (!firewall || !firewall.available) { box.classList.add('hidden'); return; }
+        box.classList.remove('hidden');
+        const blocked = blockedPorts();
+        if (firewall.mode === 'MOST_OPEN') {
+            $('#firewall-text').textContent = 'CCU-Firewall im Modus MOST_OPEN: alle Ports erreichbar.';
+        } else if (blocked.length) {
+            $('#firewall-text').textContent = `CCU-Firewall im Modus ${firewall.mode}: Port${blocked.length > 1 ? 's' : ''} ${blocked.join(', ')} nicht freigegeben.`;
+        } else {
+            $('#firewall-text').textContent = `CCU-Firewall im Modus ${firewall.mode}: alle Listener-Ports sind freigegeben.`;
+        }
+        $('#firewall-open').classList.toggle('hidden', blocked.length === 0);
+        applyFirewallStatus();
+    }
+
+    async function loadFirewall() {
+        try {
+            firewall = await getJson('firewall.cgi?cmd=status&sid=' + sid);
+        } catch (e) {
+            firewall = null;
+        }
+        renderFirewall();
+    }
+
+    $('#firewall-open').addEventListener('click', async () => {
+        const ports = blockedPorts();
+        if (!ports.length) return;
+        $('#firewall-spinner').classList.remove('hidden');
+        try {
+            const data = await getJsonPost('firewall.cgi?cmd=open&sid=' + sid, form({ ports: ports.join(',') }));
+            if (data.error) toast(data.error, 'danger', 6000);
+            else { firewall = data; toast('Ports ' + ports.join(', ') + ' in der CCU-Firewall freigegeben'); }
+        } catch (e) {
+            if (e.message !== 'invalid session') toast('Fehler: ' + e.message, 'danger');
+        }
+        $('#firewall-spinner').classList.add('hidden');
+        renderFirewall();
+    });
+
+    // --- bridges (task 11) ------------------------------------------------------------------
+
+    function renderBridges() {
+        const container = $('#bridges');
+        container.innerHTML = '';
+        state.bridges.forEach((b, idx) => {
+            const name = el('input', { type: 'text', class: 'w-md', value: b.name, placeholder: 'Name' });
+            const address = el('input', { type: 'text', class: 'grow', value: b.address, placeholder: 'host:port [host:port ...]' });
+            const user = el('input', { type: 'text', class: 'w-md', value: b.remote_username, placeholder: 'Benutzer (optional)', autocomplete: 'off' });
+            const pass = el('input', { type: 'password', class: 'w-md', value: b.remote_password, placeholder: 'Passwort', autocomplete: 'new-password' });
+            const clientid = el('input', { type: 'text', class: 'w-md', value: b.remote_clientid, placeholder: 'Client-ID (optional)' });
+            const version = select([['', 'MQTT 3.1.1 (Standard)'], ['mqttv50', 'MQTT 5'], ['mqttv311', 'MQTT 3.1.1'], ['mqttv31', 'MQTT 3.1']], b.bridge_protocol_version);
+            const clean = el('input', { type: 'checkbox' });
+            clean.checked = b.cleansession === 'true';
+            const notifications = el('input', { type: 'checkbox' });
+            notifications.checked = b.notifications !== 'false';
+            const tryPrivate = el('input', { type: 'checkbox' });
+            tryPrivate.checked = b.try_private !== 'false';
+            const cafile = el('input', { type: 'text', class: 'grow', value: b.bridge_cafile, placeholder: 'leer = ohne TLS, sonst Pfad zur CA-Datei (PEM)' });
+            const insecure = el('input', { type: 'checkbox' });
+            insecure.checked = b.bridge_insecure === 'true';
+            const topics = el('textarea', { class: 'grow', rows: Math.max(2, b.topics.length + 1), placeholder: '# both 0' });
+            topics.value = b.topics.join('\n');
+            const remove = el('button', { type: 'button', class: 'btn btn-danger', text: 'Entfernen', onclick: () => {
+                if (!confirm(`Bridge ${b.name} entfernen?`)) return;
+                state.bridges.splice(idx, 1);
+                renderBridges();
+                save();
+            } });
+            const apply = () => {
+                const n = name.value.trim();
+                const nameOk = /^[^\s#]+$/.test(n);
+                name.classList.toggle('is-invalid', !nameOk);
+                const a = address.value.trim();
+                address.classList.toggle('is-invalid', !a);
+                if (!nameOk || !a) return;
+                b.name = n;
+                b.address = a;
+                b.remote_username = user.value.trim();
+                b.remote_password = pass.value;
+                b.remote_clientid = clientid.value.trim();
+                b.bridge_protocol_version = version.value;
+                b.cleansession = clean.checked ? 'true' : '';
+                b.notifications = notifications.checked ? '' : 'false';
+                b.try_private = tryPrivate.checked ? '' : 'false';
+                b.bridge_cafile = cafile.value.trim();
+                b.bridge_insecure = b.bridge_cafile && insecure.checked ? 'true' : '';
+                b.topics = topics.value.split('\n').map(t => t.trim()).filter(Boolean);
+                save();
+            };
+            [name, address, user, pass, clientid, version, clean, notifications, tryPrivate, cafile, insecure, topics]
+                .forEach(i => i.addEventListener('change', apply));
+            const extras = b.extras.filter(x => x.trim() && !x.trim().startsWith('#')).map(x => x.trim());
+            container.appendChild(el('div', { class: 'listener' }, [
+                el('div', { class: 'form-row' }, [el('label', { text: 'Name' }), name, el('label', { text: 'Adresse' }), address, remove]),
+                el('div', { class: 'form-row' }, [el('label', { text: 'Login' }), user, pass, clientid, version]),
+                el('div', { class: 'form-row' }, [
+                    el('label', {}, [clean, 'Clean Session']),
+                    el('label', {}, [notifications, 'Status-Nachrichten ($SYS/broker/connection/…)']),
+                    el('label', {}, [tryPrivate, 'try_private'])
+                ]),
+                el('div', { class: 'form-row' }, [el('label', { text: 'TLS CA-Datei' }), cafile, el('label', {}, [insecure, 'Hostnamen nicht prüfen (bridge_insecure)'])]),
+                el('div', { class: 'form-row' }, [el('label', { text: 'Topics', style: 'align-self: flex-start' }), topics]),
+                extras.length
+                    ? el('div', { class: 'help mb-2', text: 'Weitere Optionen aus der Datei (bleiben erhalten): ' + extras.join(', ') })
+                    : el('span')
+            ]));
+        });
+    }
+
+    $('#bridge-add').addEventListener('click', () => {
+        const used = new Set(state.bridges.map(b => b.name));
+        let n = 1;
+        while (used.has('bridge' + n)) n += 1;
+        const b = newBridge('bridge' + n);
+        b.topics = ['# both 0'];
+        state.bridges.push(b);
+        renderBridges();
+        // saved once the address is filled in (apply on change)
+    });
+
+    // --- certificate ----------------------------------------------------------------------
+
     function renderCert() {
         $('#cert-custom').classList.toggle('hidden', state.certSource !== 'custom');
         $('#cert-generate').classList.toggle('hidden', state.certSource !== 'addon');
@@ -526,7 +719,8 @@
         $('#cert-spinner').classList.add('hidden');
     });
 
-    // authentication
+    // --- authentication ---------------------------------------------------------------------
+
     function renderAuth() {
         $('#auth-warning').classList.toggle('hidden', state.allowAnonymous || !!state.passwordFile);
         const foreign = !!state.passwordFile && state.passwordFile !== PASSWD_FILE;
@@ -608,7 +802,8 @@
         }
     });
 
-    // logging, persistence
+    // --- logging, persistence -------------------------------------------------------------
+
     $$('#log-types input').forEach(cb => cb.addEventListener('change', () => {
         state.logTypes = $$('#log-types input').filter(c => c.checked).map(c => c.value);
         state.logTypesExplicit = true;
@@ -654,10 +849,15 @@
             if (s.running) {
                 $('#status').innerHTML = `<span class="status-running">running</span> (seit ${formatSince(s.since)})`;
                 $('#status-detail').textContent = `pid ${s.pid}, rss ${(s.rss_kb / 1024).toFixed(1)} MB, vsz ${(s.vsz_kb / 1024).toFixed(1)} MB`;
+                $('#status-error').classList.add('hidden');
                 setButtons(true);
             } else {
                 $('#status').innerHTML = '<span class="status-stopped">stopped</span>';
                 $('#status-detail').textContent = '';
+                if (s.lastError) {
+                    $('#status-error').textContent = 'Letzte Fehlermeldung von Mosquitto: ' + s.lastError;
+                    $('#status-error').classList.remove('hidden');
+                }
                 setButtons(false);
             }
         } catch (e) {
@@ -685,7 +885,7 @@
             if (e.message !== 'invalid session') toast('Fehler: ' + e.message, 'danger');
         }
         busy = false;
-        setTimeout(pollStatus, 800);
+        setTimeout(pollStatus, 1500);
     }
 
     $('#btn-restart').addEventListener('click', () => service('restart', 'Neustart'));
@@ -850,7 +1050,9 @@
 
     // --- go ----------------------------------------------------------------------------------
 
-    loadConfig().catch(e => { if (e.message !== 'invalid session') toast('Konfiguration konnte nicht geladen werden: ' + e.message, 'danger', 8000); });
+    loadConfig()
+        .then(loadFirewall)
+        .catch(e => { if (e.message !== 'invalid session') toast('Konfiguration konnte nicht geladen werden: ' + e.message, 'danger', 8000); });
     pollStatus();
     checkUpdate();
 })();

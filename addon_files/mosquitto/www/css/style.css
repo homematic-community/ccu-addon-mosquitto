@@ -72,6 +72,17 @@ label { display: inline-block; margin-bottom: 4px; }
 .mr-2 { margin-right: 8px; }
 .hidden { display: none !important; }
 
+textarea {
+    display: inline-block;
+    padding: 4px 8px;
+    font-family: SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    color: #495057;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    min-height: 34px;
+}
+
 input[type=text], input[type=number], input[type=password], select {
     display: inline-block;
     height: 34px;
