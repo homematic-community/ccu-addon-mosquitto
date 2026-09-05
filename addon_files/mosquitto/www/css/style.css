@@ -123,6 +123,8 @@ input:disabled, select:disabled { background: #e9ecef; }
     vertical-align: middle;
 }
 .btn:hover { filter: brightness(0.92); text-decoration: none; }
+/* stop icon drawn in CSS: the U+25A0 glyph sits on the baseline in some fonts */
+.ico-stop { display: inline-block; width: 0.6em; height: 0.6em; background: currentColor; vertical-align: -0.03em; }
 .btn:disabled, .btn.disabled { opacity: 0.55; cursor: default; filter: none; }
 .btn-primary { background: #007bff; }
 .btn-warning { background: #ffc107; color: #212529; }
