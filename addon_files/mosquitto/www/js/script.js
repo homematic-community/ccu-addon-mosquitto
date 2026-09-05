@@ -73,6 +73,18 @@
         const items = [];
         let current = null; // open listener, bridge or plugin block
 
+        // trailing blank and comment lines of a listener/bridge block belong
+        // to whatever follows (a comment introducing the next block must not
+        // vanish with this one): hand them back to the file level
+        const closeBlock = () => {
+            if (!current || (current.type !== 'listener' && current.type !== 'bridge')) return;
+            const trailing = [];
+            while (current.extras.length && !splitLine(current.extras[current.extras.length - 1])) {
+                trailing.unshift(current.extras.pop());
+            }
+            items.push(...trailing.map(text => ({ type: 'line', text })));
+        };
+
         for (const line of lines) {
             const kv = splitLine(line);
             if (current && current.type === 'plugin') {
@@ -88,6 +100,7 @@
                 current = null;
             }
             if (kv && kv.key === 'listener') {
+                closeBlock();
                 const parts = kv.value.split(/\s+/);
                 current = newListener(parts[0]);
                 current.bind = parts[1] || '';
@@ -95,11 +108,13 @@
                 continue;
             }
             if (kv && kv.key === 'connection') {
+                closeBlock();
                 current = newBridge(kv.value);
                 items.push(current);
                 continue;
             }
             if (kv && (kv.key === 'plugin' || kv.key === 'global_plugin')) {
+                closeBlock();
                 current = { type: 'plugin', keyword: kv.key, path: kv.value, opts: {}, lines: [line], pending: [] };
                 items.push(current);
                 continue;
@@ -115,6 +130,7 @@
                 else current.extras.push(line);
                 continue;
             }
+            closeBlock();
             current = null;
             if (kv && MANAGED_GLOBALS.includes(kv.key)) {
                 items.push({ type: 'global', key: kv.key, value: kv.value });
