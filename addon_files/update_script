@@ -92,7 +92,14 @@ fi
 #   belongs to the user (settings page and command line)
 #
 if [ ! -f $ADDON_DIR/etc/mosquitto.conf ]; then
-    cp $ADDON_DIR/etc/mosquitto.conf.default $ADDON_DIR/etc/mosquitto.conf
+    if [ -f /etc/config/server.pem ]; then
+        cp $ADDON_DIR/etc/mosquitto.conf.default $ADDON_DIR/etc/mosquitto.conf
+    else
+        # no CCU certificate (debmatic, containers): without the TLS listeners,
+        # or the broker would refuse to start
+        awk '/^# MQTT and WebSockets over TLS/ {skip = 1} /^# --- authentication/ {skip = 0} !skip' \
+            $ADDON_DIR/etc/mosquitto.conf.default > $ADDON_DIR/etc/mosquitto.conf
+    fi
 fi
 
 #

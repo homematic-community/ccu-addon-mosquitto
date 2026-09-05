@@ -12,12 +12,23 @@ user root
 
 # --- listeners ---------------------------------------------------------------
 # On a CCU3 the ports must be opened in the firewall (Einstellungen >
-# Systemsteuerung > Firewall konfigurieren > Port-Freigabe, e.g. 1883;1884).
+# Systemsteuerung > Firewall konfigurieren > Port-Freigabe, e.g.
+# 1883;1884;8883;8884) - the settings page can do that.
 
 listener 1883
 
 listener 1884
 protocol websockets
+
+# MQTT and WebSockets over TLS with the CCU's own certificate
+listener 8883
+certfile /etc/config/server.pem
+keyfile /etc/config/server.pem
+
+listener 8884
+protocol websockets
+certfile /etc/config/server.pem
+keyfile /etc/config/server.pem
 
 # --- authentication ----------------------------------------------------------
 # allow_anonymous false + a password file (settings page > Authentifizierung)
