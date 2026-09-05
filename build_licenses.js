@@ -48,8 +48,19 @@ a { color: #007bff; text-decoration: none; }
     <a href="https://spdx.org/licenses/EPL-1.0.html" target="_blank">Eclipse Public License 1.0</a> and the
     <a href="https://spdx.org/licenses/BSD-3-Clause.html" target="_blank">Eclipse Distribution License 1.0</a>.
 </p>
+<h5>Mosquitto</h5>
 <p>
-    Bundled components (binaries from <a href="https://alpinelinux.org/" target="_blank">Alpine Linux</a> packages):
+    <a href="https://mosquitto.org/" target="_blank">Eclipse Mosquitto</a> is written and maintained by
+    <a href="https://github.com/ralight" target="_blank">Roger Light</a> and the Mosquitto contributors,
+    &copy; 2009-${new Date().getFullYear()} Roger Light. It is dual licensed under the
+    <a href="https://www.eclipse.org/legal/epl-2.0/" target="_blank">Eclipse Public License 2.0</a> and the
+    <a href="https://www.eclipse.org/org/documents/edl-v10.php" target="_blank">Eclipse Distribution License 1.0</a>
+    (BSD-3-Clause); the license texts are in the <a href="https://github.com/eclipse-mosquitto/mosquitto" target="_blank">source repository</a>
+    (LICENSE.txt, epl-v20, edl-v10). This addon only packages Mosquitto and builds it without modification;
+    please report broker bugs upstream and addon bugs to the addon repository.
+</p>
+<p>
+    Bundled libraries (built from <a href="https://alpinelinux.org/" target="_blank">Alpine Linux</a> packages, license texts in the respective projects):
 </p>
 <table>
 <tr><th>Component</th><th>Version</th><th>License</th></tr>
