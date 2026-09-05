@@ -26,7 +26,8 @@ if {$cmd == "status"} {
         # exit code 1 = not running, the JSON is still on stdout
         regsub -all {\n?child process exited abnormally$} $result "" result
     }
-    if {![string match "{*" [string trim $result]]} {
+    # (no literal brace inside the braced condition: Tcl counts it)
+    if {[string index [string trim $result] 0] ne "\{"} {
         set result {{"running":false}}
     }
     puts $result

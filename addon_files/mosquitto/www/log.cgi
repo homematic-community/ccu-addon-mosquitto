@@ -18,7 +18,8 @@ if {![info exists sid] || ![check_session $sid]} {
 
 proc section {title script} {
     puts "### $title"
-    if {[catch $script result]} {
+    # run at global level so the scripts see ADDON_DIR
+    if {[catch {uplevel #0 $script} result]} {
         regsub -all {\n?child process exited abnormally$} $result "" result
     }
     puts $result

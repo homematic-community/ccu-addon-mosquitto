@@ -54,11 +54,15 @@ if {$cmd == "generate"} {
     if {$cn != $host} {
         lappend sans "DNS:$host"
     }
-    catch {
-        foreach line [split [exec ip -o -4 addr show scope global] "\n"] {
-            if {[regexp {inet ([0-9.]+)/} $line dummy ip]} {
-                lappend sans "IP:$ip"
+    # lighttpd's PATH has no /sbin
+    foreach ipbin {/sbin/ip /bin/ip /usr/sbin/ip ip} {
+        if {![catch {exec $ipbin -o -4 addr show scope global} addrs]} {
+            foreach line [split $addrs "\n"] {
+                if {[regexp {inet ([0-9.]+)/} $line dummy ip]} {
+                    lappend sans "IP:$ip"
+                }
             }
+            break
         }
     }
     file mkdir $CERT_DIR
