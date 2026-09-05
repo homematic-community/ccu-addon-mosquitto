@@ -28,6 +28,9 @@ only. Everything below replaces that.
 - [8. Hardware verification on the lab systems](#8-hardware-verification-on-the-lab-systems)
 - [9. Documentation](#9-documentation)
 - [10. First release](#10-first-release)
+- [11. Bridge setup in the web UI](#11-bridge-setup-in-the-web-ui)
+- [12. TLS listeners in the default configuration](#12-tls-listeners-in-the-default-configuration)
+- [13. CCU firewall: show blocked ports, open them from the UI](#13-ccu-firewall-show-blocked-ports-open-them-from-the-ui)
 
 ## 1. Repository and tooling modernization
 
@@ -279,3 +282,44 @@ OpenCCU aarch64 Pi 4 — addresses and credentials stay out of the repo):
 `2.1.2+0` — after task 8 is green on all three boxes and the maintainer
 has seen the result: **no push, tag or release before that** (maintainer's
 instruction, 2026-09-05).
+
+## 11. Bridge setup in the web UI
+
+Maintainer's wish (2026-09-05). A **Bridges** card on the configuration
+tab, one block per `connection`: name, `address` (host:port, several
+allowed), remote username/password, remote client id, clean session,
+protocol version (MQTT 3.1.1 / 5), `topic` lines (one per line, the
+mosquitto syntax `pattern [direction [qos [local-prefix remote-prefix]]]`),
+TLS to the remote broker (`bridge_cafile`, `bridge_insecure`),
+notifications, `try_private`. The parser treats `connection` blocks like
+listener blocks (managed keys + verbatim extras, `connection` ends a
+listener block). Bridge changes need a restart. Covered by the parser unit
+test; the e2e test bridges the container broker to itself on a second
+listener and checks that a message crosses.
+
+## 12. TLS listeners in the default configuration
+
+Maintainer's wish (2026-09-05): a fresh install listens on 8883 (MQTT over
+TLS) and 8884 (WebSockets over TLS) as well, with the CCU's own certificate
+(`/etc/config/server.pem`) — like the 1.5.8 addon did. `update_script`
+drops the two TLS blocks from the default when `server.pem` is missing
+(the old addon renamed the fragments to `.disabled` in that case), so the
+broker always starts. Firewall hint accordingly: `1883;1884;8883;8884`.
+
+## 13. CCU firewall: show blocked ports, open them from the UI
+
+Maintainer's wish (2026-09-05). Both firmwares configure the firewall
+through `/lib/libfirewall.tcl` (`Firewall_loadConfiguration`,
+`Firewall_MODE`, `Firewall_USER_PORTS`, `Firewall_saveConfiguration`,
+`Firewall_configureFirewall`; the WebUI's `Firewall.setConfiguration` API
+method does exactly that). `MOST_OPEN` = INPUT policy ACCEPT, every port
+reachable; `RESTRICTIVE` = policy DROP, only the firmware services and the
+user ports ("Port-Freigabe") pass — in both modes user ports go to the
+local-only chain on current OpenCCU (LAN sources), which is what a broker
+on the CCU wants. `www/firewall.cgi` (session required) reports mode and
+user ports and, on `cmd=open`, adds the given listener ports to
+`Firewall_USER_PORTS`, saves and applies — the same thing the CCU's own
+firewall page does, so the entry shows up there too. The listener card
+shows per port whether the firewall lets it through and offers one button
+to open all listener ports. Verified against the real firewall pages of
+both firmwares in task 8.

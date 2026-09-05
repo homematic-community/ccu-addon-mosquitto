@@ -101,12 +101,15 @@ Start() {
     fi
 }
 
-# JSON status for the settings page: running, pid, memory, start time
+# JSON status for the settings page: running, pid, memory, start time; when
+# stopped, the last error line of the broker from the syslog (a failed
+# start explains itself on the page: port in use, bad certificate, ...)
 Status() {
-    local pid rss vsz start uptime now since
+    local pid rss vsz start uptime now since err
     pid=`Pid`
     if [ -z "$pid" ]; then
-        echo '{"running":false}'
+        err=`grep "mosquitto\[" /var/log/messages 2>/dev/null | grep -i "error\|unable\|failed" | tail -1 | sed -e 's/.*mosquitto\[[0-9]*\]: //' -e 's/^[0-9]*: //' -e 's/\\/\\\\/g' -e 's/"/\\"/g'`
+        echo "{\"running\":false,\"lastError\":\"$err\"}"
         return 1
     fi
     rss=`awk '/^VmRSS/ {print $2}' /proc/$pid/status 2>/dev/null`
