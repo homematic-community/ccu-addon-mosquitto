@@ -34,7 +34,7 @@ if {$cmd == "info"} {
         puts "error: Datei nicht gefunden"
         exit 0
     }
-    if {[catch {exec openssl x509 -in $file -noout -subject -issuer -startdate -enddate 2>@1} result]} {
+    if {[catch {run openssl x509 -in $file -noout -subject -issuer -startdate -enddate} result]} {
         regsub -all {\n?child process exited abnormally$} $result "" result
         puts "error: $result"
         exit 0
@@ -80,8 +80,8 @@ if {$cmd == "generate"} {
     puts $fp "keyUsage = digitalSignature, keyEncipherment"
     puts $fp "extendedKeyUsage = serverAuth"
     close $fp
-    set rc [catch {exec openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 3650 \
-        -config $cnf -keyout "$CERT_DIR/server.key.new" -out "$CERT_DIR/server.crt.new" 2>@1} result]
+    set rc [catch {run openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 3650 \
+        -config $cnf -keyout "$CERT_DIR/server.key.new" -out "$CERT_DIR/server.crt.new"} result]
     file delete -force $cnf
     if {$rc} {
         file delete -force "$CERT_DIR/server.key.new" "$CERT_DIR/server.crt.new"

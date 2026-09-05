@@ -40,7 +40,7 @@ fconfigure $fp -translation binary
 puts -nonewline $fp $data
 puts $fp "\npersistence false"
 close $fp
-set rc [catch {exec $ADDON_DIR/bin/mosquitto -c $CONFIG.test --test-config 2>@1} result]
+set rc [catch {run $ADDON_DIR/bin/mosquitto -c $CONFIG.test --test-config} result]
 file delete -force "$CONFIG.test"
 if {$rc} {
     file delete -force "$CONFIG.new"
@@ -49,7 +49,9 @@ if {$rc} {
     set lines {}
     foreach line [split $result "\n"] {
         if {[regexp {Error|error|Warning} $line]} {
-            lappend lines [regsub {^[0-9]+: } $line ""]
+            # (regsub with a result variable: Tcl 8.2 has no 3-argument form)
+            regsub {^[0-9]+: } $line "" line
+            lappend lines $line
         }
     }
     if {[llength $lines] == 0} {

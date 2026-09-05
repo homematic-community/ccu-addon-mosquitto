@@ -43,7 +43,8 @@ if {$argc == 2} {
         # the dict is wrapped in braces in the cfg file
         set cfg [lindex $cfg 0]
     }
-    if {[catch {dict get $cfg CONFIG_URL}]} {
+    # (no [dict] on the CCU3 firmware's Tcl 8.2: a key/value list)
+    if {[llength $cfg] % 2 != 0 || [lsearch -exact $cfg CONFIG_URL] < 0} {
         puts stderr "error: cfg file has no CONFIG_URL"
         exit 1
     }

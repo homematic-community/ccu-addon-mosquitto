@@ -27,7 +27,7 @@ if {$cmd == "status"} {
         regsub -all {\n?child process exited abnormally$} $result "" result
     }
     # (no literal brace inside the braced condition: Tcl counts it)
-    if {[string index [string trim $result] 0] ne "\{"} {
+    if {[string compare [string index [string trim $result] 0] "\{"] != 0} {
         set result {{"running":false}}
     }
     puts $result
@@ -55,7 +55,7 @@ puts -nonewline "Content-Type: text/plain; charset=utf-8\r\n\r\n"
 if {$cmd == "stop" || $cmd == "start" || $cmd == "restart" || $cmd == "reload"} {
     source ../lib/session.tcl
     if {[info exists sid] && [check_session $sid]} {
-        catch {exec $RC $cmd 2>@1} result
+        catch {run $RC $cmd} result
         regsub -all {\n?child process exited abnormally$} $result "" result
         puts $result
         exit 0

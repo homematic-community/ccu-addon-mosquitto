@@ -35,7 +35,7 @@ section "etc" {exec ls -la $ADDON_DIR/etc $ADDON_DIR/etc/certs}
 section "var" {exec ls -la $ADDON_DIR/var}
 section "df -h" {exec df -h}
 section "free" {exec free}
-section "netstat" {exec netstat -tulpen 2>@1 | grep mosquitto}
+section "netstat" {exec sh -c "netstat -tulpen 2>&1 | grep mosquitto"}
 section "iptables INPUT" {exec /usr/sbin/iptables -L INPUT -vn}
 if {[file exists /var/log/messages.0]} {
     section "/var/log/messages.0" {exec grep -i mosquitto /var/log/messages.0}

@@ -1,10 +1,26 @@
 #
-#   Query string and form body parsing for the CGIs.
+#   Query string and form body parsing plus small helpers for the CGIs.
 #
 #   The query string parameters become Tcl variables (sid, cmd, file, force),
 #   URL decoded. A POST body in application/x-www-form-urlencoded form is
 #   read with [read_form] into an array.
 #
+#   Everything here must run on Tcl 8.2 (original CCU3 firmware): no dict,
+#   no {*}, no eq/ne, no 2>@1.
+#
+
+# run <cmd> <arg>...: exec with stderr merged into the result (Tcl 8.2 has
+# no 2>@1). Raises like exec on a non-zero exit code.
+proc shell_quote {s} {
+    return "'[string map [list "'" "'\\''"] $s]'"
+}
+proc run {args} {
+    set cmd ""
+    foreach a $args {
+        append cmd [shell_quote $a] " "
+    }
+    return [exec sh -c "$cmd 2>&1"]
+}
 
 # character by character on purpose: no [subst] on user input
 proc urldecode {str} {
@@ -14,8 +30,10 @@ proc urldecode {str} {
     set i 0
     while {$i < $len} {
         set c [string index $str $i]
-        if {$c eq "%" && [regexp {^[0-9A-Fa-f]{2}$} [string range $str [expr {$i + 1}] [expr {$i + 2}]] hex]} {
-            append out [binary format c [scan $hex %x]]
+        if {$c == "%" && [regexp {^[0-9A-Fa-f]{2}$} [string range $str [expr {$i + 1}] [expr {$i + 2}]] hex]} {
+            # (scan into a variable: Tcl 8.2 has no value-returning form)
+            scan $hex %x code
+            append out [binary format c $code]
             incr i 3
         } else {
             append out $c

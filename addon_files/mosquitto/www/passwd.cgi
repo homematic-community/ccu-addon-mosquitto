@@ -83,7 +83,8 @@ if {$cmd == "set"} {
     } else {
         set args [list $MOSQUITTO_PASSWD -c -b $PASSWD $user $password]
     }
-    if {[catch {exec {*}$args 2>@1} result]} {
+    # eval instead of {*}: Tcl 8.2 on the CCU3 firmware
+    if {[catch {eval run $args} result]} {
         regsub -all {\n?child process exited abnormally$} $result "" result
         fail "mosquitto_passwd: $result"
     }
@@ -92,7 +93,7 @@ if {$cmd == "set"} {
     if {![file exists $PASSWD]} {
         fail "keine Passwortdatei vorhanden"
     }
-    if {[catch {exec $MOSQUITTO_PASSWD -D $PASSWD $user 2>@1} result]} {
+    if {[catch {run $MOSQUITTO_PASSWD -D $PASSWD $user} result]} {
         regsub -all {\n?child process exited abnormally$} $result "" result
         fail "mosquitto_passwd: $result"
     }
