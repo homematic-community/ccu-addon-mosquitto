@@ -31,7 +31,8 @@ h4, h5 { margin: 0 0 8px; font-weight: 500; }
     border-bottom: 1px solid #dee2e6;
     margin-bottom: 24px;
 }
-.navbar img { height: 28px; margin-right: 24px; align-self: center; }
+.navbar > a { display: flex; align-self: center; margin-right: 24px; }
+.navbar img { height: 28px; }
 /* the tabs set the bar height and overlap its border by 1px so the
    active underline sits exactly on the border */
 .navbar .tabs { display: flex; flex: 1; gap: 4px; margin-bottom: -1px; }
