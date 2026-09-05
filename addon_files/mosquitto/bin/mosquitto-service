@@ -108,7 +108,9 @@ Status() {
     local pid rss vsz start uptime now since err
     pid=`Pid`
     if [ -z "$pid" ]; then
-        err=`grep "mosquitto\[" /var/log/messages 2>/dev/null | grep -i "error\|unable\|failed" | tail -1 | sed -e 's/.*mosquitto\[[0-9]*\]: //' -e 's/^[0-9]*: //' -e 's/\\/\\\\/g' -e 's/"/\\"/g'`
+        # $(...) instead of backticks: the backslashes for tr would be eaten;
+        # quotes and backslashes are dropped rather than escaped (JSON)
+        err=$(grep "mosquitto\[" /var/log/messages 2>/dev/null | grep -i "error\|unable\|failed" | tail -1 | sed -e 's/.*mosquitto\[[0-9]*\]: //' -e 's/^[0-9]*: //' | tr -d '"\\')
         echo "{\"running\":false,\"lastError\":\"$err\"}"
         return 1
     fi
