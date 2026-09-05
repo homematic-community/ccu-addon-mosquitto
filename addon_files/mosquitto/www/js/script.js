@@ -1,13 +1,13 @@
 /*
- * Settings page of the Mosquitto addon. No framework: a few DOM helpers, the
- * mosquitto.conf parser/serialiser (managed keys + verbatim passthrough,
- * modelled on she's src/lib/mosquitto-conf.js) and the calls to the CGIs.
+ * Settings page of the Mosquitto addon. No framework: the mosquitto.conf
+ * parser/serialiser (managed keys + verbatim passthrough, modelled on she's
+ * src/lib/mosquitto-conf.js), a few DOM helpers and the calls to the CGIs.
+ *
+ * The model part comes first and is exported when the file is loaded by
+ * node (test/parser.test.js); the page part follows.
  */
 (() => {
     'use strict';
-
-    const $ = sel => document.querySelector(sel);
-    const $$ = sel => Array.from(document.querySelectorAll(sel));
 
     const ADDON = '/usr/local/addons/mosquitto';
     const PASSWD_FILE = ADDON + '/etc/passwd';
@@ -18,89 +18,6 @@
     const ADDON_CERT = ADDON + '/etc/certs/server.crt';
     const ADDON_KEY = ADDON + '/etc/certs/server.key';
     const DEFAULT_LOG_TYPES = ['error', 'warning', 'notice', 'information'];
-
-    // --- session and http ------------------------------------------------------
-
-    const sidMatch = location.search.match(/sid=(@[0-9a-zA-Z]{10}@)/);
-    const sid = sidMatch ? sidMatch[1] : '';
-
-    function invalidSession() {
-        $('#invalidSession').style.display = 'block';
-        clearTimeout(statusTimer);
-    }
-
-    async function get(url) {
-        const res = await fetch(url + (url.includes('?') ? '&' : '?') + '_=' + Date.now());
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const text = await res.text();
-        if (text.trim() === 'error: invalid session') {
-            invalidSession();
-            throw new Error('invalid session');
-        }
-        return text;
-    }
-
-    async function getJson(url) {
-        const data = JSON.parse(await get(url));
-        if (data && data.error === 'invalid session') {
-            invalidSession();
-            throw new Error('invalid session');
-        }
-        return data;
-    }
-
-    async function post(url, body) {
-        const res = await fetch(url, { method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const text = await res.text();
-        if (text.trim() === 'error: invalid session') {
-            invalidSession();
-            throw new Error('invalid session');
-        }
-        return text;
-    }
-
-    function form(obj) {
-        return Object.keys(obj).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(obj[k])).join('&');
-    }
-
-    // --- ui helpers ---------------------------------------------------------------
-
-    let toastTimer;
-    function toast(message, type = 'success', timeout = 2500) {
-        const el = $('#toast');
-        el.textContent = message;
-        el.className = 'alert alert-' + type;
-        clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => el.classList.add('hidden'), timeout);
-    }
-
-    function el(tag, attrs = {}, children = []) {
-        const node = document.createElement(tag);
-        for (const [k, v] of Object.entries(attrs)) {
-            if (k === 'class') node.className = v;
-            else if (k === 'text') node.textContent = v;
-            else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
-            else if (v !== undefined && v !== null) node.setAttribute(k, v);
-        }
-        for (const c of children) node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
-        return node;
-    }
-
-    // tabs
-    function showTab(name) {
-        $$('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + name));
-        $$('.navbar .tabs a').forEach(a => a.classList.toggle('active', a.dataset.tab === name));
-        if (name === 'licenses' && !$('#licenses-frame').src) {
-            $('#licenses-frame').src = 'licenses.html';
-        }
-    }
-    $$('.navbar .tabs a').forEach(a => a.addEventListener('click', e => {
-        e.preventDefault();
-        history.replaceState(null, '', '#' + a.dataset.tab);
-        showTab(a.dataset.tab);
-    }));
-    showTab(['configuration', 'debug', 'licenses'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'configuration');
 
     // --- mosquitto.conf model -------------------------------------------------------
     //
@@ -147,11 +64,13 @@
             if (current && current.type === 'plugin') {
                 if (kv && kv.key.startsWith('plugin_opt_')) {
                     current.opts[kv.key.slice('plugin_opt_'.length)] = kv.value;
-                    current.lines.push(line);
+                    current.lines.push(...current.pending, line);
+                    current.pending = [];
                     continue;
                 }
                 if (!kv) { current.pending.push(line); continue; }
                 items.push(...current.pending.map(text => ({ type: 'line', text })));
+                current.pending = [];
                 current = null;
             }
             if (kv && kv.key === 'listener') {
@@ -180,6 +99,7 @@
         }
         if (current && current.type === 'plugin') {
             items.push(...current.pending.map(text => ({ type: 'line', text })));
+            current.pending = [];
         }
         return items;
     }
@@ -230,6 +150,10 @@
             if (p.path.endsWith('/mosquitto_acl_file.so')) state.aclFile = p.opts.acl_file || ACL_FILE;
         }
 
+        state.certSource = 'ccu';
+        state.certfile = CCU_CERT;
+        state.keyfile = CCU_CERT;
+        state.tlsVersion = '';
         const tls = state.listeners.find(l => l.tls);
         if (tls) {
             state.certfile = tls.certfile;
@@ -250,7 +174,9 @@
         }
     }
 
-    function listenerLines(l) {
+    // listenerLines(l, isNew): the block's lines; the trailing blank line is
+    // kept as it was in the file (always for a new listener)
+    function listenerLines(l, isNew) {
         const out = ['listener ' + l.port + (l.bind ? ' ' + l.bind : '')];
         if (l.protocol === 'websockets') out.push('protocol websockets');
         if (l.tls) {
@@ -261,11 +187,17 @@
         }
         if (l.max_connections !== '' && l.max_connections !== undefined) out.push('max_connections ' + l.max_connections);
         const extras = l.extras.slice();
+        const hadBlank = extras.length > 0 && extras[extras.length - 1].trim() === '';
         while (extras.length && extras[extras.length - 1].trim() === '') extras.pop();
         out.push(...extras);
-        out.push('');
+        if (hadBlank || isNew) out.push('');
         return out;
     }
+
+    // what mosquitto assumes when a key is absent - such keys are only written
+    // once their value differs, so a hand-written file is not padded with
+    // defaults on every save
+    const GLOBAL_DEFAULTS = { allow_anonymous: 'false', persistence: 'false', connection_messages: 'true' };
 
     function serialise() {
         const globals = {
@@ -296,7 +228,7 @@
             } else if (i.type === 'global') {
                 if (!written.has(i.key)) writeGlobal(i.key);
             } else if (i.type === 'listener') {
-                if (state.listeners.includes(i)) out.push(...listenerLines(i));
+                if (state.listeners.includes(i)) out.push(...listenerLines(i, false));
             } else if (i.type === 'plugin') {
                 if (i.path.endsWith('/mosquitto_password_file.so')) {
                     if (state.passwordFile && !havePasswd) { out.push(...pluginBlock(PLUGIN_PASSWD, 'password_file', state.passwordFile)); havePasswd = true; }
@@ -309,7 +241,7 @@
         }
         // managed globals the file did not have yet
         const missing = ['allow_anonymous', 'persistence', 'autosave_interval', 'connection_messages', 'log_type']
-            .filter(k => !written.has(k) && globals[k] !== null);
+            .filter(k => !written.has(k) && globals[k] !== null && globals[k] !== GLOBAL_DEFAULTS[k]);
         if (missing.length) {
             if (out.length && out[out.length - 1].trim() !== '') out.push('');
             missing.forEach(writeGlobal);
@@ -318,7 +250,7 @@
         for (const l of state.listeners) {
             if (!state.items.includes(l)) {
                 if (out.length && out[out.length - 1].trim() !== '') out.push('');
-                out.push(...listenerLines(l));
+                out.push(...listenerLines(l, true));
             }
         }
         if (state.passwordFile && !havePasswd) {
@@ -339,9 +271,107 @@
         return result.join('\n') + '\n';
     }
 
-    // --- load / save ----------------------------------------------------------------
+    // loaded by node for the unit test: export the model, skip the page
+    if (typeof document === 'undefined') {
+        module.exports = { parse, load, serialise, state, currentCert, PASSWD_FILE, ACL_FILE, PLUGIN_PASSWD, PLUGIN_ACL, CCU_CERT, ADDON_CERT, ADDON_KEY };
+        return;
+    }
 
-    let restartNeeded = false;
+    // =============================== the page ===============================
+
+    const $ = sel => document.querySelector(sel);
+    const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+    // --- session and http ------------------------------------------------------
+
+    const sidMatch = location.search.match(/sid=(@[0-9a-zA-Z]{10}@)/);
+    const sid = sidMatch ? sidMatch[1] : '';
+
+    function invalidSession() {
+        $('#invalidSession').style.display = 'block';
+        clearTimeout(statusTimer);
+    }
+
+    async function get(url) {
+        const res = await fetch(url + (url.includes('?') ? '&' : '?') + '_=' + Date.now());
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const text = await res.text();
+        if (text.trim() === 'error: invalid session') {
+            invalidSession();
+            throw new Error('invalid session');
+        }
+        return text;
+    }
+
+    async function getJson(url) {
+        const data = JSON.parse(await get(url));
+        if (data && data.error === 'invalid session') {
+            invalidSession();
+            throw new Error('invalid session');
+        }
+        return data;
+    }
+
+    async function post(url, body) {
+        const res = await fetch(url, { method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const text = await res.text();
+        if (text.trim() === 'error: invalid session') {
+            invalidSession();
+            throw new Error('invalid session');
+        }
+        return text;
+    }
+
+    async function getJsonPost(url, body) {
+        const data = JSON.parse(await post(url, body));
+        if (data && data.error === 'invalid session') { invalidSession(); throw new Error('invalid session'); }
+        return data;
+    }
+
+    function form(obj) {
+        return Object.keys(obj).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(obj[k])).join('&');
+    }
+
+    // --- ui helpers ---------------------------------------------------------------
+
+    let toastTimer;
+    function toast(message, type = 'success', timeout = 2500) {
+        const el = $('#toast');
+        el.textContent = message;
+        el.className = 'alert alert-' + type;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => el.classList.add('hidden'), timeout);
+    }
+
+    function el(tag, attrs = {}, children = []) {
+        const node = document.createElement(tag);
+        for (const [k, v] of Object.entries(attrs)) {
+            if (k === 'class') node.className = v;
+            else if (k === 'text') node.textContent = v;
+            else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+            else if (v !== undefined && v !== null) node.setAttribute(k, v);
+        }
+        for (const c of children) node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+        return node;
+    }
+
+    // tabs
+    function showTab(name) {
+        $$('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + name));
+        $$('.navbar .tabs a').forEach(a => a.classList.toggle('active', a.dataset.tab === name));
+        if (name === 'licenses' && !$('#licenses-frame').src) {
+            $('#licenses-frame').src = 'licenses.html';
+        }
+    }
+    $$('.navbar .tabs a').forEach(a => a.addEventListener('click', e => {
+        e.preventDefault();
+        history.replaceState(null, '', '#' + a.dataset.tab);
+        showTab(a.dataset.tab);
+    }));
+    showTab(['configuration', 'debug', 'licenses'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'configuration');
+
+    // --- load / save ----------------------------------------------------------------
 
     async function loadConfig() {
         const text = await get('getconfig.cgi?sid=' + sid);
@@ -354,7 +384,6 @@
         try {
             const result = (await post('setconfig.cgi?sid=' + sid, text)).trim();
             if (result === 'ok') {
-                restartNeeded = true;
                 $('#apply-bar').classList.remove('hidden');
                 // re-parse what was written so the items reflect the file
                 load(text);
@@ -424,6 +453,7 @@
                 save();
             };
             [port, bind, protocol, tls, maxConn].forEach(i => i.addEventListener('change', apply));
+            const extras = l.extras.filter(x => x.trim() && !x.trim().startsWith('#')).map(x => x.trim());
             container.appendChild(el('div', { class: 'listener' }, [
                 el('div', { class: 'form-row' }, [
                     el('label', { text: 'Port' }), port,
@@ -434,8 +464,8 @@
                     el('span', { class: 'grow' }),
                     remove
                 ]),
-                l.extras.filter(x => x.trim() && !x.trim().startsWith('#')).length
-                    ? el('div', { class: 'help mb-2', text: 'Weitere Optionen aus der Datei (bleiben erhalten): ' + l.extras.filter(x => x.trim() && !x.trim().startsWith('#')).map(x => x.trim()).join(', ') })
+                extras.length
+                    ? el('div', { class: 'help mb-2', text: 'Weitere Optionen aus der Datei (bleiben erhalten): ' + extras.join(', ') })
                     : el('span')
             ]));
         });
@@ -486,7 +516,7 @@
             if (result === 'ok') {
                 toast('Zertifikat erzeugt');
                 renderCert();
-                if (state.listeners.some(l => l.tls)) { restartNeeded = true; $('#apply-bar').classList.remove('hidden'); }
+                if (state.listeners.some(l => l.tls)) $('#apply-bar').classList.remove('hidden');
             } else {
                 toast(result, 'danger', 8000);
             }
@@ -535,19 +565,17 @@
                     el('button', { type: 'button', class: 'btn btn-outline mr-2', text: 'Passwort ändern', onclick: () => { $('#user-name').value = name; $('#user-pass1').focus(); } }),
                     el('button', { type: 'button', class: 'btn btn-danger', text: 'Löschen', onclick: async () => {
                         if (!confirm(`Benutzer ${name} löschen?`)) return;
-                        const data = await getJsonPost('passwd.cgi?cmd=delete&sid=' + sid, form({ user: name }));
-                        if (data.error) toast(data.error, 'danger', 6000);
-                        else { toast(`Benutzer ${name} gelöscht`); renderUsers(data.users); }
+                        try {
+                            const data = await getJsonPost('passwd.cgi?cmd=delete&sid=' + sid, form({ user: name }));
+                            if (data.error) toast(data.error, 'danger', 6000);
+                            else { toast(`Benutzer ${name} gelöscht`); renderUsers(data.users); }
+                        } catch (e) {
+                            if (e.message !== 'invalid session') toast('Fehler: ' + e.message, 'danger');
+                        }
                     } })
                 ])
             ]));
         }
-    }
-
-    async function getJsonPost(url, body) {
-        const data = JSON.parse(await post(url, body));
-        if (data && data.error === 'invalid session') { invalidSession(); throw new Error('invalid session'); }
-        return data;
     }
 
     async function loadUsers() {
@@ -561,14 +589,12 @@
         const name = $('#user-name').value.trim();
         const pw1 = $('#user-pass1').value;
         const pw2 = $('#user-pass2').value;
-        let valid = true;
-        $('#user-name').classList.toggle('is-invalid', !/^[A-Za-z0-9._@+-]{1,64}$/.test(name));
-        valid = valid && /^[A-Za-z0-9._@+-]{1,64}$/.test(name);
+        const nameOk = /^[A-Za-z0-9._@+-]{1,64}$/.test(name);
         const pwOk = pw1.length > 0 && pw1 === pw2;
+        $('#user-name').classList.toggle('is-invalid', !nameOk);
         $('#user-pass1').classList.toggle('is-invalid', !pwOk);
         $('#user-pass2').classList.toggle('is-invalid', !pwOk);
-        valid = valid && pwOk;
-        if (!valid) return;
+        if (!nameOk || !pwOk) return;
         try {
             const data = await getJsonPost('passwd.cgi?cmd=set&sid=' + sid, form({ user: name, password: pw1 }));
             if (data.error) { toast(data.error, 'danger', 6000); return; }
@@ -606,7 +632,6 @@
     // --- process control and status ---------------------------------------------------
 
     let statusTimer;
-    let statusInterval = 5000;
     let busy = false;
 
     function setButtons(running) {
@@ -630,18 +655,16 @@
                 $('#status').innerHTML = `<span class="status-running">running</span> (seit ${formatSince(s.since)})`;
                 $('#status-detail').textContent = `pid ${s.pid}, rss ${(s.rss_kb / 1024).toFixed(1)} MB, vsz ${(s.vsz_kb / 1024).toFixed(1)} MB`;
                 setButtons(true);
-                statusInterval = 5000;
             } else {
                 $('#status').innerHTML = '<span class="status-stopped">stopped</span>';
                 $('#status-detail').textContent = '';
                 setButtons(false);
-                statusInterval = 5000;
             }
         } catch (e) {
             $('#status').innerHTML = '<span class="status-starting">unbekannt</span>';
             $('#status-detail').textContent = '';
         }
-        statusTimer = setTimeout(pollStatus, statusInterval);
+        statusTimer = setTimeout(pollStatus, 5000);
     }
 
     async function service(cmd, label) {
@@ -654,10 +677,7 @@
             const result = await get(`service.cgi?cmd=${cmd}&sid=${sid}`);
             if (/OK/.test(result)) {
                 toast('Kommando ausgeführt');
-                if (cmd === 'restart' || cmd === 'start') {
-                    restartNeeded = false;
-                    $('#apply-bar').classList.add('hidden');
-                }
+                if (cmd === 'restart' || cmd === 'start') $('#apply-bar').classList.add('hidden');
             } else {
                 toast(result.trim() || 'Fehler', 'danger', 6000);
             }
@@ -678,12 +698,12 @@
 
     // true if version a is newer than b, versions are <x.y.z>+<build>
     function isNewer(a, b) {
-        const parse = v => {
+        const parseVersion = v => {
             const [main, build] = String(v).split('+');
             return { parts: main.split('.').map(Number), build: parseInt(build || '0', 10) };
         };
-        const va = parse(a);
-        const vb = parse(b);
+        const va = parseVersion(a);
+        const vb = parseVersion(b);
         for (let i = 0; i < 3; i++) {
             if ((va.parts[i] || 0) !== (vb.parts[i] || 0)) return (va.parts[i] || 0) > (vb.parts[i] || 0);
         }
