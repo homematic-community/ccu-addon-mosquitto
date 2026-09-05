@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mosquitto</title>
+<link rel="stylesheet" href="css/style.css">
+
+<div id="invalidSession">Sitzung ungültig. Bitte diese Seite schließen.</div>
+
+<nav class="navbar">
+    <a href="https://github.com/homematic-community/ccu-addon-mosquitto" target="_blank"><img src="mosquitto-text-side-28.png" alt="Mosquitto"></a>
+    <div class="tabs">
+        <a href="#configuration" data-tab="configuration">Konfiguration</a>
+        <a href="#debug" data-tab="debug">Debug</a>
+        <a href="#licenses" data-tab="licenses">Lizenzen</a>
+    </div>
+    <div id="addon-version"></div>
+</nav>
+
+<div id="toast" class="alert hidden"></div>
+
+<div class="container">
+
+    <!-- ============================ Konfiguration ============================ -->
+    <div class="tab" id="tab-configuration">
+
+        <div id="update-notify" class="card warning hidden">
+            <div class="card-body">
+                Update steht zur Verfügung: <span id="update-link"></span>
+                <button id="update-start" type="button" class="btn btn-warning ml-2">&#8681; Herunterladen und installieren</button>
+                <div class="help mt-2">Alternativ manuell über die Zusatzsoftware-Seite der CCU (Paket von der <a href="https://github.com/homematic-community/ccu-addon-mosquitto/releases/latest" target="_blank">Release-Seite</a> hochladen).</div>
+            </div>
+        </div>
+
+        <div id="apply-bar" class="alert alert-warning hidden">
+            <strong>Konfiguration gespeichert.</strong> Die Änderungen werden erst nach einem Neustart von Mosquitto wirksam.
+            <button id="apply-restart" type="button" class="btn btn-warning ml-2">&#8635; Jetzt neu starten</button>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <span class="card-title">Mosquitto Prozess</span>
+                <div class="form-row">
+                    <button id="btn-restart" type="button" class="btn btn-warning" disabled>&#8635; Neustart</button>
+                    <button id="btn-stop" type="button" class="btn btn-warning" disabled>&#9632; Stop</button>
+                    <button id="btn-start" type="button" class="btn btn-warning" disabled>&#9654; Start</button>
+                    <button id="btn-reload" type="button" class="btn btn-outline" disabled title="Konfiguration neu laden (SIGHUP) - reicht für Passwort- und ACL-Datei">Konfiguration neu laden</button>
+                    <span id="status-spinner" class="spinner"></span>
+                    <span><span id="status"></span><br><span id="status-detail"></span></span>
+                </div>
+                <div class="help">Auf einer CCU3 müssen die Listener-Ports in der Firewall freigegeben werden (Einstellungen &gt; Systemsteuerung &gt; Firewall konfigurieren &gt; Port-Freigabe, z.&nbsp;B. <code>1883;1884</code>).</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <span class="card-title">Listener <a class="help" href="https://mosquitto.org/man/mosquitto-conf-5.html#listener" target="_blank" title="Dokumentation">?</a></span>
+                <div id="listeners"></div>
+                <button id="listener-add" type="button" class="btn btn-primary">+ Listener hinzufügen</button>
+                <div class="help mt-2">Übliche Ports: 1883 MQTT, 8883 MQTT über TLS, 1884 WebSockets, 8884 WebSockets über TLS. Bind-Adresse leer = alle Adressen.</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <span class="card-title">Zertifikat für TLS-Listener</span>
+                <div class="form-row">
+                    <select id="cert-source" class="w-lg">
+                        <option value="ccu">CCU-Zertifikat (/etc/config/server.pem)</option>
+                        <option value="addon">Selbstsigniertes Zertifikat des Addons (etc/certs/)</option>
+                        <option value="custom">Eigene Dateien (Pfade angeben)</option>
+                    </select>
+                    <button id="cert-generate" type="button" class="btn btn-primary hidden">Zertifikat erzeugen</button>
+                    <span id="cert-spinner" class="spinner hidden"></span>
+                </div>
+                <div id="cert-custom" class="hidden">
+                    <div class="form-row">
+                        <label class="w-sm">certfile</label><input type="text" id="cert-certfile" class="grow" placeholder="/pfad/zum/zertifikat.pem">
+                    </div>
+                    <div class="form-row">
+                        <label class="w-sm">keyfile</label><input type="text" id="cert-keyfile" class="grow" placeholder="/pfad/zum/schluessel.pem">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <label class="w-sm">tls_version</label>
+                    <select id="tls-version" class="w-md">
+                        <option value="">Standard</option>
+                        <option value="tlsv1.2">tlsv1.2</option>
+                        <option value="tlsv1.3">tlsv1.3</option>
+                    </select>
+                    <span class="help">Mindestversion für alle TLS-Listener</span>
+                </div>
+                <pre id="cert-info" class="hidden"></pre>
+                <div class="help">Das selbstsignierte Zertifikat wird auf der CCU mit <code>openssl</code> erzeugt (RSA 2048, 10 Jahre, Hostname und aktuelle IP-Adressen als SAN). Clients müssen ihm vertrauen oder die Prüfung abschalten.</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <span class="card-title">Authentifizierung</span>
+                <div class="form-row">
+                    <label class="w-md">Anonyme Verbindungen</label>
+                    <select id="allow-anonymous" class="w-lg">
+                        <option value="true">erlaubt (allow_anonymous true)</option>
+                        <option value="false">nicht erlaubt - Login erforderlich</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label><input type="checkbox" id="password-file"> Passwortdatei verwenden (<code id="password-file-path">etc/passwd</code>)</label>
+                </div>
+                <div id="auth-warning" class="alert alert-warning hidden">Ohne Passwortdatei und ohne anonyme Verbindungen kann sich kein Client verbinden.</div>
+                <div id="password-file-foreign" class="alert alert-info hidden">Die Konfiguration verwendet eine andere Passwortdatei; die Benutzerverwaltung hier arbeitet nur mit <code>/usr/local/addons/mosquitto/etc/passwd</code>.</div>
+                <div id="users-block" class="hidden">
+                    <table class="users" id="users"></table>
+                    <div class="form-row">
+                        <input type="text" id="user-name" class="w-md" placeholder="Benutzer" autocomplete="off">
+                        <input type="password" id="user-pass1" class="w-md" placeholder="Passwort" autocomplete="new-password">
+                        <input type="password" id="user-pass2" class="w-md" placeholder="Passwort wiederholen" autocomplete="new-password">
+                        <button id="user-set" type="button" class="btn btn-primary">Anlegen / Passwort setzen</button>
+                    </div>
+                </div>
+                <div class="form-row mt-2">
+                    <label><input type="checkbox" id="acl-file"> ACL-Datei verwenden (<code id="acl-file-path">etc/acl</code>)</label>
+                </div>
+                <div class="help">Die ACL-Datei wird auf der Kommandozeile gepflegt, siehe <a href="https://mosquitto.org/man/mosquitto-conf-5.html#acl_file" target="_blank">Dokumentation</a>. Änderungen an Passwort- und ACL-Datei übernimmt Mosquitto mit „Konfiguration neu laden“.</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <span class="card-title">Logging (syslog, /var/log/messages)</span>
+                <div class="form-row" id="log-types">
+                    <label><input type="checkbox" value="error"> error</label>
+                    <label><input type="checkbox" value="warning"> warning</label>
+                    <label><input type="checkbox" value="notice"> notice</label>
+                    <label><input type="checkbox" value="information"> information</label>
+                    <label><input type="checkbox" value="debug"> debug</label>
+                    <label><input type="checkbox" value="subscribe"> subscribe</label>
+                    <label><input type="checkbox" value="unsubscribe"> unsubscribe</label>
+                    <label><input type="checkbox" value="websockets"> websockets</label>
+                </div>
+                <div class="form-row">
+                    <label><input type="checkbox" id="connection-messages"> Verbindungsauf- und -abbau protokollieren (connection_messages)</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <span class="card-title">Persistenz</span>
+                <div class="form-row">
+                    <label><input type="checkbox" id="persistence"> Retained Messages und Subscriptions in <code>var/mosquitto.db</code> speichern</label>
+                </div>
+                <div class="form-row">
+                    <label class="w-md">autosave_interval</label>
+                    <input type="number" id="autosave-interval" class="w-sm" min="0" step="1">
+                    <span class="help">Sekunden, 0 = nur beim Beenden</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ================================ Debug ================================ -->
+    <div class="tab" id="tab-debug">
+        <div class="card">
+            <div class="card-body">
+                <button id="log-download" type="button" class="btn btn-info">&#8681; Log herunterladen</button>
+                <span class="help ml-2">Versionen, Konfiguration, Speicher, Sockets, Firewall und die Mosquitto-Zeilen aus dem Syslog</span>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body">
+                <span class="card-title">Versionen</span>
+                <table class="versions" id="versions"></table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body">
+                <span class="card-title">Kommandozeile</span>
+                <pre>/usr/local/addons/mosquitto/etc/mosquitto.conf    Konfiguration
+/usr/local/etc/config/rc.d/mosquitto restart|reload|status
+/usr/local/addons/mosquitto/bin/mosquitto_sub -t '#' -v
+/usr/local/addons/mosquitto/bin/mosquitto_pub -t test -m hello
+/usr/local/addons/mosquitto/bin/mosquitto_passwd, mosquitto_ctrl</pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================== Lizenzen =============================== -->
+    <div class="tab" id="tab-licenses">
+        <iframe id="licenses-frame"></iframe>
+    </div>
+
+</div>
+
+<!-- self-update modal -->
+<div id="modal-update" class="modal-backdrop hidden">
+    <div class="modal">
+        <div class="modal-header">Update auf Version <span id="update-version"></span></div>
+        <div class="modal-body">
+            <div id="update-confirm">
+                <div class="alert alert-warning"><strong>Vorher ein CCU-Backup anlegen.</strong> Das Update erfolgt auf eigene Verantwortung, einen Weg zurück gibt es nur über das Backup.</div>
+                <p>Das Paket für diese Zentrale wird von GitHub geladen, die Prüfsumme geprüft und das Update wie über die Zusatzsoftware-Seite installiert. Mosquitto wird dabei kurz gestoppt, die Konfiguration (<code>etc/</code>) und die Persistenz-Datenbank (<code>var/</code>) bleiben erhalten. Ein Neustart der Zentrale ist nicht nötig.</p>
+                <p class="help">Details zu den Änderungen: <a href="https://github.com/homematic-community/ccu-addon-mosquitto/releases/latest" target="_blank">Release Notes auf GitHub</a></p>
+            </div>
+            <div id="update-progress" class="hidden">
+                <p><span class="spinner"></span> <span id="update-message"></span></p>
+                <div id="update-hint" class="help"></div>
+            </div>
+            <div id="update-result" class="hidden">
+                <div id="update-success" class="alert alert-success hidden"></div>
+                <div id="update-error" class="alert alert-danger hidden"></div>
+                <pre id="update-log" class="hidden"></pre>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn" id="update-cancel">Abbrechen</button>
+            <button type="button" class="btn btn-warning" id="update-go">&#8681; Update starten</button>
+            <button type="button" class="btn hidden" id="update-close">Schließen</button>
+            <button type="button" class="btn btn-primary hidden" id="update-reload">&#8635; Seite neu laden</button>
+        </div>
+    </div>
+</div>
+
+<script src="js/script.js"></script>
