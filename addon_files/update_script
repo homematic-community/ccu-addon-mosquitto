@@ -1,68 +1,120 @@
 #!/bin/sh
+#
+#   Installer, run by the CCU firmware from inside the unpacked package
+#   (cwd = package root). Exit codes: 10 = fresh install, the original CCU3
+#   firmware reboots afterwards; 0 = update, nothing to reboot, the service
+#   is started here again; 13 = unsupported platform.
+#
 
 ADDONS_DIR=/usr/local/addons
-MSQ_DIR=$ADDONS_DIR/mosquitto
-BIN_DIR=/usr/local/bin
-LIB_DIR=/usr/local/lib
+ADDON_DIR=$ADDONS_DIR/mosquitto
 CONF_DIR=/usr/local/etc/config
+WWW_DIR=$CONF_DIR/addons/www/mosquitto
+EXITCODE=10
 
-# check for unsupported platforms
-if grep -qim1 busmatic /www/api/methods/ccu/downloadFirmware.tcl; then
-  exit 13
+# the package is built per architecture; the binaries only run on their own
+. ./mosquitto/versions
+if [ "`uname -m`" != "$ADDON_ARCH" ]; then
+    echo "error: this package is for $ADDON_ARCH, this system is `uname -m`" >&2
+    exit 13
 fi
 
 mount | grep /usr/local 2>&1 >/dev/null
 if [ $? -eq 1 ]; then
-  mount /usr/local
+    mount /usr/local
 fi
 
-mkdir -p $ADDONS_DIR && chmod 755 $ADDONS_DIR 
+mkdir -p $ADDONS_DIR && chmod 755 $ADDONS_DIR
+mkdir -p $CONF_DIR/addons/www && chmod 755 $CONF_DIR/addons/www
+mkdir -p $CONF_DIR/rc.d
 
+#
+#   Stop the service on an update
+#
 if [ -f $CONF_DIR/rc.d/mosquitto ]; then
+    EXITCODE=0
     $CONF_DIR/rc.d/mosquitto stop
 fi
 
+#
+#   Everything but etc/ and var/ is owned by the addon: remove the previous
+#   version's binaries, libraries and pages so nothing stale survives (the
+#   1.5.8 packages had libcrypto 1.1, libwebsockets 8, libev in lib/, and a
+#   rc.d/ directory inside the addon).
+#
+rm -rf $ADDON_DIR/bin $ADDON_DIR/lib $ADDON_DIR/www $ADDON_DIR/rc.d $ADDON_DIR/versions $ADDON_DIR/VERSION
+
+#
+#   Install the addon files
+#
 cp -af mosquitto $ADDONS_DIR/
+mkdir -p $ADDON_DIR/var $ADDON_DIR/etc
 
-ln -sf $MSQ_DIR/rc.d/mosquitto $CONF_DIR/rc.d/mosquitto
-ln -sf $MSQ_DIR/www $CONF_DIR/addons/www/mosquitto
-
-# Migration
-
-if [ -f $MSQ_DIR/etc/conf.d/mqtt-listener.conf ]; then
-    rm $MSQ_DIR/etc/conf.d/mqtt-listener.conf
+#
+#   Migration from 1.5.8+x: one mosquitto.conf with `include_dir etc/conf.d/`
+#   and one file per listener. The settings page works on a single file, so
+#   fold the fragments into etc/mosquitto.conf (the old main file minus the
+#   include_dir line first, then every fragment; `.disabled` fragments were
+#   TLS listeners the old service script switched off when
+#   /etc/config/server.pem was missing) and keep the directory as conf.d.old.
+#
+if [ -d $ADDON_DIR/etc/conf.d ]; then
+    OLD=$ADDON_DIR/etc/mosquitto.conf
+    NEW=$ADDON_DIR/etc/mosquitto.conf.migrated
+    {
+        echo "# migrated from the conf.d layout of ccu-addon-mosquitto 1.5.8 on `date '+%Y-%m-%d'`"
+        if [ -f $OLD ]; then
+            grep -v '^[[:space:]]*include_dir' $OLD
+        fi
+        for f in $ADDON_DIR/etc/conf.d/*.conf $ADDON_DIR/etc/conf.d/*.conf.disabled; do
+            [ -f "$f" ] || continue
+            echo ""
+            echo "# `basename $f`"
+            cat "$f"
+        done
+        echo ""
+    } > $NEW
+    mv $NEW $OLD
+    mv $ADDON_DIR/etc/conf.d $ADDON_DIR/etc/conf.d.old
 fi
 
-if [ -f $MSQ_DIR/etc/conf.d/ws-listener.conf ]; then
-    rm $MSQ_DIR/etc/conf.d/ws-listener.conf
+#
+#   Default configuration on the first install only - on the CCU the file
+#   belongs to the user (settings page and command line)
+#
+if [ ! -f $ADDON_DIR/etc/mosquitto.conf ]; then
+    cp $ADDON_DIR/etc/mosquitto.conf.default $ADDON_DIR/etc/mosquitto.conf
 fi
 
-if [ -f $LIB_DIR/libcrypto.so.1.1 ]; then
-    rm $LIB_DIR/libcrypto.so.1.1
-fi
+#
+#   Links
+#
+rmdir $WWW_DIR 2> /dev/null
+# -n: on an update WWW_DIR is already a symlink to a directory, which busybox ln -T refuses to replace
+ln -sfn $ADDON_DIR/www $WWW_DIR
+ln -sf $ADDON_DIR/bin/mosquitto-service $CONF_DIR/rc.d/mosquitto
 
-if [ -f $LIB_DIR/libev.so ]; then
-    rm $LIB_DIR/libev.so*
-fi
-
-if [ -f $LIB_DIR/libmosquitto.so ]; then
-    rm $LIB_DIR/libmosquitto*
-fi
-
-if [ -f $LIB_DIR/libssl.so.1.1 ]; then
-    rm $LIB_DIR/libssl.so.1.1
-fi
-
-if [ -f $LIB_DIR/libwebsockets.so ]; then
-    rm $LIB_DIR/libwebsockets.so*
-fi
-
-if [ -f $BIN_DIR/mosquitto ]; then
-    rm $BIN_DIR/mosquitto*
-fi
+#
+#   Configuration button in the CCU WebUI (Einstellungen > Systemsteuerung >
+#   Zusatzsoftware)
+#
+touch $CONF_DIR/hm_addons.cfg
+./update_addon mosquitto mosquitto.cfg
 
 sync
 
-/etc/config/rc.d/mosquitto restart
+#
+#   Start the service again after an update (exit code 0 = no reboot).
+#   The original CCU3 firmware installs addons during the shutdown phase of
+#   the reboot that follows the upload (/etc/init.d/S00InstallAddon runs
+#   /bin/install_addon, which runs this script in a chroot); the following
+#   boot starts the addon, so nothing may be started from inside the chroot.
+#   OpenCCU runs this script live and does not reboot after an update.
+#
+if [ $EXITCODE -eq 0 ] && [ ! -f /etc/init.d/S00InstallAddon ]; then
+    # never start from the installer's temp dir (OpenCCU deletes it afterwards)
+    cd /
+    $CONF_DIR/rc.d/mosquitto start
+fi
 
-exit 0
+exit $EXITCODE

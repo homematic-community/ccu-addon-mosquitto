@@ -1,0 +1,41 @@
+# Mosquitto configuration - ccu-addon-mosquitto
+#
+# This file is managed by the addon's settings page (CCU WebUI > Einstellungen
+# > Systemsteuerung > Zusatzsoftware > Mosquitto). Lines the settings page
+# does not know are kept as they are, so editing this file by hand is fine
+# too. Apply changes with: /usr/local/etc/config/rc.d/mosquitto restart
+#
+# Reference: https://mosquitto.org/man/mosquitto-conf-5.html
+
+# the CCU has no mosquitto user, the broker runs as root
+user root
+
+# --- listeners ---------------------------------------------------------------
+# On a CCU3 the ports must be opened in the firewall (Einstellungen >
+# Systemsteuerung > Firewall konfigurieren > Port-Freigabe, e.g. 1883;1884).
+
+listener 1883
+
+listener 1884
+protocol websockets
+
+# --- authentication ----------------------------------------------------------
+# allow_anonymous false + a password file (settings page > Authentifizierung)
+# requires every client to log in.
+
+allow_anonymous true
+
+# --- persistence -------------------------------------------------------------
+
+persistence true
+persistence_location /usr/local/addons/mosquitto/var/
+autosave_interval 1800
+
+# --- logging (syslog -> /var/log/messages) -------------------------------------
+
+log_dest syslog
+log_type error
+log_type warning
+log_type notice
+log_type information
+connection_messages true

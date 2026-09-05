@@ -1,0 +1,178 @@
+#!/bin/sh
+#
+#   Service script of the Mosquitto addon, linked as
+#   /usr/local/etc/config/rc.d/mosquitto and called by the CCU (start/stop at
+#   boot, info/restart/uninstall from the WebUI) and by the settings page.
+#
+
+CONF_DIR=/usr/local/etc/config
+ADDON_DIR=/usr/local/addons/mosquitto
+WWW_DIR=$CONF_DIR/addons/www/mosquitto
+CONFIG=$ADDON_DIR/etc/mosquitto.conf
+PIDFILE=/var/run/mosquitto.pid
+DAEMON=$ADDON_DIR/bin/mosquitto
+
+# No LD_LIBRARY_PATH here: the bundled binaries find their (musl) libraries
+# via their patched RPATH; exposing $ADDON_DIR/lib globally could poison
+# glibc firmware binaries with same-named musl libraries.
+
+# provides VERSION_ADDON and MOSQUITTO_VERSION
+. $ADDON_DIR/versions
+
+log() {
+    logger -t mosquitto -p daemon.$1 "$2"
+}
+
+# pid of the running broker, empty when not running; drops a stale pid file
+Pid() {
+    local pid
+    if [ -f $PIDFILE ]; then
+        pid=`cat $PIDFILE 2>/dev/null`
+        if [ -n "$pid" ] && [ -d /proc/$pid ] && grep -q "^$DAEMON\|^mosquitto" /proc/$pid/cmdline 2>/dev/null; then
+            echo $pid
+            return 0
+        fi
+        rm -f $PIDFILE
+    fi
+    # started by hand?
+    for pid in `pidof mosquitto 2>/dev/null`; do
+        case "`tr '\0' ' ' < /proc/$pid/cmdline 2>/dev/null`" in
+            $DAEMON*) echo $pid; return 0 ;;
+        esac
+    done
+    return 1
+}
+
+Stop() {
+    local pid i
+    pid=`Pid`
+    if [ -z "$pid" ]; then
+        echo "Mosquitto not running"
+        return 1
+    fi
+    echo -n "Stopping Mosquitto: "
+    log info "Stopping Mosquitto (pid $pid)"
+    kill $pid 2>/dev/null
+    i=0
+    while [ $i -lt 20 ] && [ -d /proc/$pid ]; do
+        sleep 0.5
+        i=$((i + 1))
+    done
+    if [ -d /proc/$pid ]; then
+        log warn "Killing Mosquitto (pid $pid)"
+        kill -9 $pid 2>/dev/null
+        sleep 1
+    fi
+    rm -f $PIDFILE
+    echo "OK"
+    log info "Mosquitto stopped"
+    return 0
+}
+
+Start() {
+    local dir pid
+    # only etc/ and var/ are worth backing up
+    for dir in bin lib www; do
+        [ -d $ADDON_DIR/$dir ] && touch $ADDON_DIR/$dir/.nobackup
+    done
+
+    if [ -n "`Pid`" ]; then
+        echo "Mosquitto already running"
+        log err "cannot start - already running"
+        return 1
+    fi
+
+    if [ ! -f $CONFIG ]; then
+        cp $ADDON_DIR/etc/mosquitto.conf.default $CONFIG
+        log warn "$CONFIG was missing, default configuration restored"
+    fi
+
+    echo -n "Starting Mosquitto: "
+    log info "Starting Mosquitto $MOSQUITTO_VERSION (ccu-addon-mosquitto $VERSION_ADDON) https://github.com/homematic-community/ccu-addon-mosquitto"
+    # Mosquitto must not inherit a working directory that can vanish (the
+    # OpenCCU installer's temp dir)
+    cd /
+    if start-stop-daemon -S -q -b -m -p $PIDFILE --exec $DAEMON -- -c $CONFIG; then
+        echo "OK"
+    else
+        echo "FAILED"
+        log err "start-stop-daemon failed"
+        return 1
+    fi
+}
+
+# JSON status for the settings page: running, pid, memory, start time
+Status() {
+    local pid rss vsz start uptime now since
+    pid=`Pid`
+    if [ -z "$pid" ]; then
+        echo '{"running":false}'
+        return 1
+    fi
+    rss=`awk '/^VmRSS/ {print $2}' /proc/$pid/status 2>/dev/null`
+    vsz=`awk '/^VmSize/ {print $2}' /proc/$pid/status 2>/dev/null`
+    start=`awk '{print int($22 / 100)}' /proc/$pid/stat 2>/dev/null`
+    uptime=`awk '{print int($1)}' /proc/uptime`
+    now=`date +%s`
+    since=$((now - (uptime - ${start:-0})))
+    echo "{\"running\":true,\"pid\":$pid,\"rss_kb\":${rss:-0},\"vsz_kb\":${vsz:-0},\"since\":$since,\"uptime\":$((uptime - ${start:-0}))}"
+    return 0
+}
+
+case "$1" in
+
+    stop)
+        Stop || exit 1
+    ;;
+
+    start)
+        Start || exit 1
+    ;;
+
+    restart)
+        Stop
+        sleep 1
+        Start || exit 1
+    ;;
+
+    reload)
+        pid=`Pid`
+        if [ -z "$pid" ]; then
+            echo "Mosquitto not running"
+            exit 1
+        fi
+        echo -n "Reloading Mosquitto configuration: "
+        kill -HUP $pid && echo "OK"
+        log info "configuration reloaded (SIGHUP)"
+    ;;
+
+    status)
+        Status || exit 1
+    ;;
+
+    info)
+        echo "Info: <div><a target=\"_blank\" href=\"https://github.com/homematic-community/ccu-addon-mosquitto\"><img src=\"/addons/mosquitto/mosquitto-text-side-28.png\" width=\"240\"/></a></div>"
+        echo "Name: Mosquitto"
+        echo "Version: $VERSION_ADDON"
+        echo "Update: /addons/mosquitto/update_check.cgi"
+        echo "Config-Url: /addons/mosquitto/settings.cgi"
+        echo "Operations: restart uninstall"
+    ;;
+
+    uninstall)
+        Stop
+        $ADDON_DIR/bin/update_addon mosquitto
+        rm -f $CONF_DIR/rc.d/mosquitto
+        rm -f $WWW_DIR
+        rm -rf $ADDON_DIR
+        log info "Uninstalled ccu-addon-mosquitto"
+    ;;
+
+    *)
+        echo "Usage: mosquitto {start|stop|restart|reload|status|info|uninstall}" >&2
+        exit 1
+    ;;
+
+esac
+
+exit 0
