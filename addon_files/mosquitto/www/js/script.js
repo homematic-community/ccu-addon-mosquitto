@@ -296,7 +296,9 @@
             } else if (i.type === 'listener') {
                 if (state.listeners.includes(i)) out.push(...listenerLines(i, false));
             } else if (i.type === 'bridge') {
-                if (state.bridges.includes(i)) out.push(...bridgeLines(i, false));
+                // a bridge without an address is not configured yet (just added on the page):
+                // leave it out, Mosquitto rejects a connection without one
+                if (state.bridges.includes(i) && i.address) out.push(...bridgeLines(i, false));
             } else if (i.type === 'plugin') {
                 if (i.path.endsWith('/mosquitto_password_file.so')) {
                     if (state.passwordFile && !havePasswd) { out.push(...pluginBlock(PLUGIN_PASSWD, 'password_file', state.passwordFile)); havePasswd = true; }
@@ -318,7 +320,7 @@
             if (!state.items.includes(l)) { blank(); out.push(...listenerLines(l, true)); }
         }
         for (const b of state.bridges) {
-            if (!state.items.includes(b)) { blank(); out.push(...bridgeLines(b, true)); }
+            if (!state.items.includes(b) && b.address) { blank(); out.push(...bridgeLines(b, true)); }
         }
         if (state.passwordFile && !havePasswd) { blank(); out.push(...pluginBlock(PLUGIN_PASSWD, 'password_file', state.passwordFile)); }
         if (state.aclFile && !haveAcl) { blank(); out.push(...pluginBlock(PLUGIN_ACL, 'acl_file', state.aclFile)); }
