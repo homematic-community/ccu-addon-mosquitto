@@ -48,17 +48,20 @@ in die eine `etc/mosquitto.conf` übernommen (das alte Verzeichnis bleibt als `c
 Unter _Einstellungen > Systemsteuerung > Zusatzsoftware > Mosquitto_ (Schaltfläche _Einstellungen_):
 
 * **Prozess** – Status, Start, Stop, Neustart, Konfiguration neu laden (SIGHUP).
-* **Listener** – Port, Bind-Adresse, MQTT oder WebSockets, TLS ein/aus, maximale Verbindungen;
-  Listener hinzufügen und entfernen. Zu jedem Port steht, ob die CCU-Firewall ihn durchlässt;
+* **Listener** – Port, Bind-Adresse, MQTT oder WebSockets, TLS ein/aus, maximale Verbindungen,
+  anonyme Verbindungen je Listener (übersteuert die globale Einstellung); Listener hinzufügen und
+  entfernen. Zu jedem Port steht, ob die CCU-Firewall ihn durchlässt;
   gesperrte Ports werden mit einer Schaltfläche in die Port-Freigabe der Firewall eingetragen.
 * **Bridges** – Verbindungen zu anderen Brokern: Adresse(n), Login, Client-ID, Clean Session,
   Protokollversion, TLS (CA-Datei), Status-Nachrichten, `try_private` und die `topic`-Zeilen.
 * **Zertifikat** für die TLS-Listener: das Zertifikat der CCU (`/etc/config/server.pem`), ein auf
   der CCU erzeugtes selbstsigniertes Zertifikat (`etc/certs/`) oder eigene Dateien; minimale
   TLS-Version.
-* **Authentifizierung** – anonyme Verbindungen erlauben oder nicht, Passwortdatei mit
-  Benutzerverwaltung (`etc/passwd`, Plugin `mosquitto_password_file`), ACL-Datei ein/aus
-  (`etc/acl`, wird auf der Kommandozeile gepflegt).
+* **Authentifizierung** – anonyme Verbindungen erlauben oder nicht (global, je Listener
+  übersteuerbar – der übliche Fall: ein Listener `1883` auf `127.0.0.1` ohne Login für die Clients
+  auf der CCU selbst, der Listener nach außen mit Login), Passwortdatei mit Benutzerverwaltung
+  (`etc/passwd`, Plugin `mosquitto_password_file`), ACL-Datei ein/aus (`etc/acl`, wird auf der
+  Kommandozeile gepflegt).
 * **Logging** – Log-Typen, Verbindungsmeldungen.
 * **Persistenz** – ein/aus, Speicherort (Addon-Verzeichnis, ein von der CCU eingehängter
   USB-Stick unter `/media/usb…` zur Schonung der SD-Karte, oder ein eigener Pfad; die Seite
@@ -86,6 +89,12 @@ nicht kennt, unverändert – die Datei kann also auch per Hand gepflegt werden
 
 Die Ausgaben landen im Syslog (`/var/log/messages`, Tag `mosquitto`). Die Persistenz-Datenbank
 liegt in `var/`. Ein CCU-Backup enthält `etc/` und `var/`, nicht die Binaries.
+
+> **Nicht geplant:** eine Oberfläche für die ACL-Datei oder das Dynamic-Security-Plugin. Wer
+> Benutzer, Rollen und Topic-Rechte komfortabel verwalten möchte, findet das im Broker-Management
+> von [she](https://github.com/hobbyquaker/she) (Dynsec-Benutzer, Rollen und ACLs live ohne
+> Neustart, Listener, TLS und Zertifikate, auch für einen Broker auf einem anderen Host). Das Addon
+> bleibt der kleine Broker mit den Grundfunktionen.
 
 > **Hinweis zu Mosquitto 2.x:** Ohne `allow_anonymous true` und ohne Passwortdatei nimmt der
 > Broker keine Verbindungen an (bei 1.5.8 waren anonyme Verbindungen der Standard). Das Addon
@@ -123,8 +132,10 @@ gebaut, die Binaries werden per `patchelf` in den Addon-Pfad verankert) und die 
 Mosquitto MQTT broker as an addon for the Homematic CCU3 and OpenCCU (armv7l, aarch64, x86_64).
 Upload the package for your platform (see the table above) under _Settings > Control panel >
 Additional software_; on a CCU3 open the listener ports in the firewall afterwards. The
-configuration page (listeners, TLS certificate, authentication with password-file users, ACL,
-logging, persistence, process control, log download, one-click update) is reached from the same
-place. `etc/mosquitto.conf` can also be edited by hand; the page keeps lines it does not manage.
+configuration page (listeners with per-listener anonymous access, TLS certificate, authentication
+with password-file users, ACL, logging, persistence, process control, log download, one-click
+update) is reached from the same place. `etc/mosquitto.conf` can also be edited by hand; the page
+keeps lines it does not manage. A UI for the ACL file or the Dynamic Security plugin is out of
+scope – [she](https://github.com/hobbyquaker/she) manages Mosquitto users, roles and ACLs.
 Versions are `<mosquitto version>+<package build>`; a new package is released automatically for
 every Mosquitto release.
