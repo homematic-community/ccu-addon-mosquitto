@@ -1,0 +1,137 @@
+name: auto-release
+
+# Automatic releases (ROADMAP task 7): once a day, check whether Mosquitto
+# has a newer release than the one pinned in package.json. If so: set the
+# addon version to <new mosquitto>+0, build all three architectures, run the
+# end-to-end test, commit, and create the release. A Mosquitto major switch
+# is reported but never released here (the configuration UI's model has to
+# be checked first).
+#
+# Repository variable AUTO_RELEASE_PUBLISH=true publishes the release right
+# away (latest); otherwise it is created as a draft for the maintainer.
+# Note: GitHub disables scheduled workflows after 60 days without commits.
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Release even when Mosquitto is up to date (bumps the +N addon build)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # build_release_body.sh needs tags and history
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Check for a new Mosquitto release
+        id: check
+        run: node update_versions.js
+
+      - name: Nothing new
+        if: steps.check.outputs.updates != 'true' && inputs.force != true
+        run: echo "Mosquitto ${{ steps.check.outputs.current }} is up to date, no release (newest tag ${{ steps.check.outputs.latest }})"
+
+      - name: Apply version bump
+        if: steps.check.outputs.updates == 'true' || inputs.force == true
+        id: bump
+        run: |
+          if [ "${{ steps.check.outputs.updates }}" = "true" ]; then
+            node update_versions.js --apply
+          else
+            node update_versions.js --apply --bump
+          fi
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          git diff --stat
+
+      - uses: docker/setup-qemu-action@v3
+        if: steps.bump.outcome == 'success'
+        with:
+          platforms: arm,arm64
+
+      - name: Install patchelf
+        if: steps.bump.outcome == 'success'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq patchelf >/dev/null
+
+      - name: Build addon packages
+        if: steps.bump.outcome == 'success'
+        run: ./build.sh
+
+      - name: End-to-end test (x86_64 package)
+        if: steps.bump.outcome == 'success'
+        run: test/e2e.sh dist
+
+      - name: Commit and push the version bump
+        if: steps.bump.outcome == 'success'
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "${{ steps.bump.outputs.version }}: automatic release (${{ steps.check.outputs.summary || 'forced run' }})"
+          git push origin HEAD:master
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        if: steps.commit.outcome == 'success'
+        uses: ncipollo/release-action@v1
+        with:
+          draft: ${{ vars.AUTO_RELEASE_PUBLISH != 'true' }}
+          prerelease: false
+          makeLatest: ${{ vars.AUTO_RELEASE_PUBLISH == 'true' }}
+          artifacts: dist/*
+          bodyFile: RELEASE_BODY.md
+          tag: "${{ steps.bump.outputs.version }}"
+          commit: ${{ steps.commit.outputs.sha }}
+
+      - name: Open an issue when the run failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUMMARY: ${{ steps.check.outputs.summary }}
+          VERSION: ${{ steps.bump.outputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            echo "The automatic release run failed: $RUN_URL"
+            echo ""
+            echo "Detected update: ${SUMMARY:-none}"
+            echo "Target version: ${VERSION:-not bumped}"
+            echo ""
+            echo "Nothing was pushed or released unless the log says otherwise. Re-run the workflow after fixing the cause."
+          } > /tmp/issue.md
+          gh issue create --title "auto-release failed (${SUMMARY:-no update detected})" --body-file /tmp/issue.md
+
+      - name: Open an issue on a Mosquitto major release
+        if: steps.check.outputs.major == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LATEST: ${{ steps.check.outputs.latest }}
+          CURRENT: ${{ steps.check.outputs.current }}
+        run: |
+          if gh issue list --state open --search "in:title \"Mosquitto $LATEST\"" | grep -q .; then
+            exit 0
+          fi
+          {
+            echo "Mosquitto $LATEST is released (pinned: $CURRENT). A major version is never released automatically:"
+            echo "check the configuration UI's model (deprecated options, plugins) and the build flags first, then set"
+            echo "the version in package.json and run the build-release workflow."
+          } > /tmp/issue.md
+          gh issue create --title "Mosquitto $LATEST: major release, manual update needed" --body-file /tmp/issue.md

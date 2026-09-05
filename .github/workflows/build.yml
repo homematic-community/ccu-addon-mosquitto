@@ -1,0 +1,51 @@
+name: build-release
+
+# Manual release build: builds all three architectures from the version in
+# package.json, runs the end-to-end test and creates a draft prerelease
+# tagged with the version (no "v" prefix, like the old 1.5.8+x releases).
+# The maintainer reviews and publishes it.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # build_release_body.sh needs tags and history
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm,arm64
+
+      - name: Install patchelf
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq patchelf >/dev/null
+
+      - name: Read addon version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Build addon packages
+        run: ./build.sh
+
+      - name: End-to-end test (x86_64 package)
+        run: test/e2e.sh dist
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          draft: true
+          prerelease: true
+          artifacts: dist/*
+          bodyFile: RELEASE_BODY.md
+          tag: "${{ steps.version.outputs.version }}"
+          commit: ${{ github.sha }}
