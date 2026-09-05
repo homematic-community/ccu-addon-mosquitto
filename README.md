@@ -36,7 +36,9 @@ Der MQTT-Broker [Mosquitto](https://mosquitto.org/) als Addon für die
    konfigurieren > Port-Freigabe_), z. B. `1883;1884` – bei TLS zusätzlich `8883;8884`.
 
 Danach läuft der Broker mit der Standardkonfiguration: MQTT auf Port 1883, WebSockets auf 1884,
-anonyme Verbindungen erlaubt, Persistenz eingeschaltet, Log ins Syslog (`/var/log/messages`).
+beides zusätzlich über TLS auf 8883 und 8884 mit dem Zertifikat der CCU, anonyme Verbindungen
+erlaubt, Persistenz eingeschaltet, Log ins Syslog (`/var/log/messages`). Die Konfigurationsseite
+zeigt, ob die CCU-Firewall die Listener-Ports durchlässt, und kann sie mit einem Klick freigeben.
 
 Beim Update von einer alten Version (1.5.8+x) werden die Konfigurationsschnipsel aus `etc/conf.d/`
 in die eine `etc/mosquitto.conf` übernommen (das alte Verzeichnis bleibt als `conf.d.old` liegen).
@@ -47,7 +49,10 @@ Unter _Einstellungen > Systemsteuerung > Zusatzsoftware > Mosquitto_ (Schaltflä
 
 * **Prozess** – Status, Start, Stop, Neustart, Konfiguration neu laden (SIGHUP).
 * **Listener** – Port, Bind-Adresse, MQTT oder WebSockets, TLS ein/aus, maximale Verbindungen;
-  Listener hinzufügen und entfernen.
+  Listener hinzufügen und entfernen. Zu jedem Port steht, ob die CCU-Firewall ihn durchlässt;
+  gesperrte Ports werden mit einer Schaltfläche in die Port-Freigabe der Firewall eingetragen.
+* **Bridges** – Verbindungen zu anderen Brokern: Adresse(n), Login, Client-ID, Clean Session,
+  Protokollversion, TLS (CA-Datei), Status-Nachrichten, `try_private` und die `topic`-Zeilen.
 * **Zertifikat** für die TLS-Listener: das Zertifikat der CCU (`/etc/config/server.pem`), ein auf
   der CCU erzeugtes selbstsigniertes Zertifikat (`etc/certs/`) oder eigene Dateien; minimale
   TLS-Version.
