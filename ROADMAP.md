@@ -60,8 +60,11 @@ anywhere (it would poison firmware binaries with musl libraries).
   `mosquitto_ctrl`, `mosquitto_passwd`, the `mosquitto_password_file.so`
   and `mosquitto_acl_file.so` plugins (Mosquitto 2.1 deprecates the
   `password_file`/`acl_file` options in favour of these plugins; they are
-  the same code). Not shipped: DynSec, persist-sqlite, sparkplug plugins,
-  `mosquitto_rr`, `mosquitto_db_dump`, `mosquitto_signal`, C++ bindings.
+  the same code) and `mosquitto_dynamic_security.so` (maintainer's
+  request 2026-09-05: available for command-line use with
+  `mosquitto_ctrl dynsec`, not managed by the UI). Not shipped:
+  persist-sqlite and sparkplug plugins, `mosquitto_rr`,
+  `mosquitto_db_dump`, `mosquitto_signal`, C++ bindings.
 - Libraries follow from the closure: musl, OpenSSL 3, libwebsockets,
   cJSON, libmicrohttpd, c-ares, libedit/ncurses (mosquitto_ctrl).
 - Alpine branch: `edge` (tracks Mosquitto releases within days). The
