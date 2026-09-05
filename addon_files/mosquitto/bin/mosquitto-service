@@ -11,6 +11,9 @@ WWW_DIR=$CONF_DIR/addons/www/mosquitto
 CONFIG=$ADDON_DIR/etc/mosquitto.conf
 PIDFILE=/var/run/mosquitto.pid
 DAEMON=$ADDON_DIR/bin/mosquitto
+# absolute: a CGI's PATH may lack /sbin
+SSD=/sbin/start-stop-daemon
+[ -x $SSD ] || SSD=start-stop-daemon
 
 # No LD_LIBRARY_PATH here: the bundled binaries find their (musl) libraries
 # via their patched RPATH; exposing $ADDON_DIR/lib globally could poison
@@ -109,12 +112,21 @@ Start() {
         esac
     fi
 
+    # A password or ACL file the configuration refers to must exist, or the
+    # plugin refuses to initialise and the broker does not start (the settings
+    # page can enable the plugins before the first user is created).
+    for f in `awk '$1 == "plugin_opt_password_file" || $1 == "password_file" || $1 == "plugin_opt_acl_file" || $1 == "acl_file" {print $2}' $CONFIG 2>/dev/null`; do
+        if [ ! -f "$f" ]; then
+            mkdir -p "`dirname "$f"`" && : > "$f" && chmod 600 "$f" && log info "created empty $f"
+        fi
+    done
+
     echo -n "Starting Mosquitto: "
     log info "Starting Mosquitto $MOSQUITTO_VERSION (ccu-addon-mosquitto $VERSION_ADDON) https://github.com/homematic-community/ccu-addon-mosquitto"
     # Mosquitto must not inherit a working directory that can vanish (the
     # OpenCCU installer's temp dir)
     cd /
-    if start-stop-daemon -S -q -b -m -p $PIDFILE --exec $DAEMON -- -c $CONFIG; then
+    if $SSD -S -q -b -m -p $PIDFILE --exec $DAEMON -- -c $CONFIG; then
         echo "OK"
     else
         echo "FAILED"
