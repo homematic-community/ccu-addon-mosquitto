@@ -45,7 +45,7 @@
     ]);
     const MANAGED_GLOBALS = ['allow_anonymous', 'persistence', 'persistence_location', 'autosave_interval', 'connection_messages', 'log_type', 'password_file', 'acl_file'];
     const VAR_DIR = ADDON + '/var/';
-    const LISTENER_KEYS = ['protocol', 'certfile', 'keyfile', 'tls_version', 'max_connections'];
+    const LISTENER_KEYS = ['protocol', 'certfile', 'keyfile', 'tls_version', 'max_connections', 'listener_allow_anonymous'];
     // bridge keys with one value (topic lines are collected separately)
     const BRIDGE_KEYS = ['address', 'remote_username', 'remote_password', 'remote_clientid', 'cleansession',
         'bridge_protocol_version', 'bridge_cafile', 'bridge_insecure', 'notifications', 'try_private'];
@@ -59,7 +59,7 @@
     }
 
     function newListener(port) {
-        return { type: 'listener', port, bind: '', protocol: 'mqtt', tls: false, certfile: '', keyfile: '', tls_version: '', max_connections: '', extras: [] };
+        return { type: 'listener', port, bind: '', protocol: 'mqtt', tls: false, certfile: '', keyfile: '', tls_version: '', max_connections: '', listener_allow_anonymous: '', extras: [] };
     }
 
     function newBridge(name) {
@@ -152,6 +152,7 @@
         listeners: [],
         bridges: [],
         allowAnonymous: false,
+        perListenerSettings: false,   // the file has the deprecated per_listener_settings true
         persistence: false,
         persistenceLocation: '',   // '' = mosquitto default (the working directory)
         autosaveInterval: '',
@@ -183,6 +184,7 @@
             }
         }
         state.allowAnonymous = globals.allow_anonymous === 'true';
+        state.perListenerSettings = state.items.some(i => i.type === 'line' && /^\s*per_listener_settings\s+true\b/.test(i.text));
         state.persistence = globals.persistence === 'true';
         state.persistenceLocation = globals.persistence_location || '';
         state.autosaveInterval = globals.autosave_interval !== undefined ? globals.autosave_interval : '';
@@ -216,6 +218,13 @@
         }
     }
 
+    // whether a listener takes anonymous clients: its own listener_allow_anonymous
+    // (Mosquitto 2.1) overrides the global allow_anonymous
+    function anonymousOn(l) {
+        if (l.listener_allow_anonymous === 'true' || l.listener_allow_anonymous === 'false') return l.listener_allow_anonymous === 'true';
+        return state.allowAnonymous;
+    }
+
     function currentCert() {
         switch (state.certSource) {
             case 'ccu': return { certfile: CCU_CERT, keyfile: CCU_CERT };
@@ -244,6 +253,7 @@
             if (state.tlsVersion) out.push('tls_version ' + state.tlsVersion);
         }
         if (l.max_connections !== '' && l.max_connections !== undefined) out.push('max_connections ' + l.max_connections);
+        if (l.listener_allow_anonymous === 'true' || l.listener_allow_anonymous === 'false') out.push('listener_allow_anonymous ' + l.listener_allow_anonymous);
         return withExtras(out, l.extras, isNew);
     }
 
@@ -336,7 +346,7 @@
 
     // loaded by node for the unit test: export the model, skip the page
     if (typeof document === 'undefined') {
-        module.exports = { parse, load, serialise, state, currentCert, newListener, newBridge,
+        module.exports = { parse, load, serialise, state, currentCert, anonymousOn, newListener, newBridge,
             PASSWD_FILE, ACL_FILE, PLUGIN_PASSWD, PLUGIN_ACL, CCU_CERT, ADDON_CERT, ADDON_KEY, VAR_DIR };
         return;
     }
@@ -509,6 +519,11 @@
             const tls = el('input', { type: 'checkbox' });
             tls.checked = l.tls;
             const maxConn = el('input', { type: 'number', class: 'w-sm', min: -1, value: l.max_connections, placeholder: 'unbegrenzt' });
+            const anon = select([
+                ['', 'global: ' + (state.allowAnonymous ? 'erlaubt' : 'nicht erlaubt')],
+                ['true', 'erlaubt'],
+                ['false', 'nicht erlaubt (Login)']
+            ], l.listener_allow_anonymous === 'true' || l.listener_allow_anonymous === 'false' ? l.listener_allow_anonymous : '', 'w-md anon');
             const remove = el('button', { type: 'button', class: 'btn btn-danger', text: 'Entfernen', onclick: () => {
                 if (!confirm(`Listener auf Port ${l.port} entfernen?`)) return;
                 state.listeners.splice(idx, 1);
@@ -524,9 +539,11 @@
                 l.protocol = protocol.value;
                 l.tls = tls.checked;
                 l.max_connections = maxConn.value.trim();
+                l.listener_allow_anonymous = anon.value;
+                renderAuthWarning();
                 save();
             };
-            [port, bind, protocol, tls, maxConn].forEach(i => i.addEventListener('change', apply));
+            [port, bind, protocol, tls, maxConn, anon].forEach(i => i.addEventListener('change', apply));
             const extras = l.extras.filter(x => x.trim() && !x.trim().startsWith('#')).map(x => x.trim());
             const fw = el('span', { class: 'help fw-status', 'data-port': l.port });
             container.appendChild(el('div', { class: 'listener' }, [
@@ -536,6 +553,7 @@
                     el('label', { text: 'Protokoll' }), protocol,
                     el('label', {}, [tls, 'TLS']),
                     el('label', { text: 'Max. Verbindungen', title: 'max_connections' }), maxConn,
+                    el('label', { text: 'Anonym', title: 'listener_allow_anonymous' }), anon,
                     fw,
                     el('span', { class: 'grow' }),
                     remove
@@ -755,8 +773,21 @@
 
     // --- authentication ---------------------------------------------------------------------
 
+    // without a password file every listener that refuses anonymous clients takes nobody
+    function renderAuthWarning() {
+        const closed = state.listeners.filter(l => !anonymousOn(l));
+        const warn = !state.passwordFile && closed.length > 0;
+        const box = $('#auth-warning');
+        box.classList.toggle('hidden', !warn);
+        if (!warn) return;
+        box.textContent = closed.length === state.listeners.length
+            ? 'Ohne Passwortdatei und ohne anonyme Verbindungen kann sich kein Client verbinden.'
+            : 'Ohne Passwortdatei kann sich auf Port ' + closed.map(l => l.port).join(', ') + ' kein Client verbinden (anonyme Verbindungen dort nicht erlaubt).';
+    }
+
     function renderAuth() {
-        $('#auth-warning').classList.toggle('hidden', state.allowAnonymous || !!state.passwordFile);
+        renderAuthWarning();
+        $('#per-listener-hint').classList.toggle('hidden', !state.perListenerSettings);
         const foreign = !!state.passwordFile && state.passwordFile !== PASSWD_FILE;
         $('#password-file-foreign').classList.toggle('hidden', !foreign);
         $('#users-block').classList.toggle('hidden', !state.passwordFile || foreign);

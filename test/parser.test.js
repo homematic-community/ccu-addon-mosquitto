@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 
 const model = require(path.join(__dirname, '..', 'addon_files', 'mosquitto', 'www', 'js', 'script.js'));
-const { parse, load, serialise, state, newListener, newBridge, PASSWD_FILE, PLUGIN_PASSWD, CCU_CERT, ADDON_CERT, ADDON_KEY } = model;
+const { parse, load, serialise, state, anonymousOn, newListener, newBridge, PASSWD_FILE, PLUGIN_PASSWD, CCU_CERT, ADDON_CERT, ADDON_KEY } = model;
 
 // the shipped default configuration is the primary round-trip fixture
 const DEFAULT = fs.readFileSync(path.join(__dirname, '..', 'addon_files', 'mosquitto', 'etc', 'mosquitto.conf.default'), 'utf8');
@@ -169,6 +169,53 @@ test('persistence location: default parsed, USB stick path written in place, abs
     assert.strictEqual(serialise(), 'listener 1883\n');
     state.persistenceLocation = '/tmp/p/';
     assert.strictEqual(serialise(), 'listener 1883\n\npersistence_location /tmp/p/\n');
+});
+
+// --- per-listener authentication (task 17) ------------------------------------------
+
+test('listener_allow_anonymous: parsed per listener, overrides the global value, round trip', () => {
+    const conf = 'listener 1883 127.0.0.1\nlistener_allow_anonymous true\n\nlistener 8883\ncertfile ' + CCU_CERT + '\nkeyfile ' + CCU_CERT + '\n\nallow_anonymous false\n';
+    load(conf);
+    assert.strictEqual(state.allowAnonymous, false);
+    assert.deepStrictEqual(state.listeners.map(l => l.listener_allow_anonymous), ['true', '']);
+    assert.deepStrictEqual(state.listeners.map(anonymousOn), [true, false]);
+    assert.strictEqual(state.perListenerSettings, false);
+    assert.strictEqual(serialise(), conf);
+});
+
+test('listener_allow_anonymous is written into the block, removed with "wie global", kept on a new listener', () => {
+    load(DEFAULT);
+    state.listeners[0].listener_allow_anonymous = 'false';
+    let out = serialise();
+    assert.ok(out.includes('listener 1883\nlistener_allow_anonymous false\n\nlistener 1884\n'), out);
+    assert.ok(out.includes('allow_anonymous true\n'), 'the global value is untouched');
+    load(out);
+    assert.deepStrictEqual(state.listeners.map(anonymousOn), [false, true, true, true]);
+    state.listeners[0].listener_allow_anonymous = '';
+    state.listeners[2].listener_allow_anonymous = 'false';
+    out = serialise();
+    assert.ok(out.includes('listener 1883\n\nlistener 1884\n'), out);
+    assert.ok(out.includes('listener 8883\ncertfile ' + CCU_CERT + '\nkeyfile ' + CCU_CERT + '\nlistener_allow_anonymous false\n'), out);
+    const l = newListener('1885');
+    l.bind = '127.0.0.1';
+    l.listener_allow_anonymous = 'true';
+    state.listeners.push(l);
+    out = serialise();
+    assert.ok(out.endsWith('\nlistener 1885 127.0.0.1\nlistener_allow_anonymous true\n'), out);
+    load(out);
+    assert.strictEqual(state.listeners.length, 5);
+    assert.deepStrictEqual(state.listeners.map(anonymousOn), [true, true, false, true, true]);
+});
+
+test('the deprecated per_listener_settings true is flagged and left in the file', () => {
+    const conf = 'per_listener_settings true\n\nlistener 1883\nallow_anonymous true\n\nlistener 8883\nallow_anonymous false\n';
+    load(conf);
+    assert.strictEqual(state.perListenerSettings, true);
+    assert.strictEqual(state.allowAnonymous, true, 'first occurrence wins, as before');
+    const out = serialise();
+    assert.ok(out.startsWith('per_listener_settings true\n'), out);
+    load('listener 1883\nallow_anonymous true\n');
+    assert.strictEqual(state.perListenerSettings, false);
 });
 
 // --- bridges (task 11) -------------------------------------------------------------

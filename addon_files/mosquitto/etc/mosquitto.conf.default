@@ -32,7 +32,9 @@ keyfile /etc/config/server.pem
 
 # --- authentication ----------------------------------------------------------
 # allow_anonymous false + a password file (settings page > Authentifizierung)
-# requires every client to log in.
+# requires every client to log in. A listener can override the global value
+# with listener_allow_anonymous true|false in its block (e.g. a
+# "listener 1883 127.0.0.1" without login, an external one with).
 
 allow_anonymous true
 

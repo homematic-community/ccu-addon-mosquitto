@@ -120,11 +120,13 @@
                         <option value="true">erlaubt (allow_anonymous true)</option>
                         <option value="false">nicht erlaubt - Login erforderlich</option>
                     </select>
+                    <span class="help">je Listener übersteuerbar (Spalte „Anonym“ in der Listener-Karte, <code>listener_allow_anonymous</code>) - z.&nbsp;B. anonym nur auf <code>127.0.0.1</code>, Login von außen</span>
                 </div>
                 <div class="form-row">
                     <label><input type="checkbox" id="password-file"> Passwortdatei verwenden (<code id="password-file-path">etc/passwd</code>)</label>
                 </div>
                 <div id="auth-warning" class="alert alert-warning hidden">Ohne Passwortdatei und ohne anonyme Verbindungen kann sich kein Client verbinden.</div>
+                <div id="per-listener-hint" class="alert alert-info hidden">Die Datei setzt <code>per_listener_settings true</code> (in Mosquitto 2.1 veraltet): Authentifizierungs-Optionen gelten dann je Listener, diese Seite verwaltet sie aber global. Besser die Zeile entfernen und anonyme Verbindungen je Listener in der Listener-Karte einstellen.</div>
                 <div id="password-file-foreign" class="alert alert-info hidden">Die Konfiguration verwendet eine andere Passwortdatei; die Benutzerverwaltung hier arbeitet nur mit <code>/usr/local/addons/mosquitto/etc/passwd</code>.</div>
                 <div id="users-block" class="hidden">
                     <table class="users" id="users"></table>

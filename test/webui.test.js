@@ -356,6 +356,43 @@ test('B authentication: password file with users from the page; anonymous off; p
     assert.deepEqual(page.problems, []);
 });
 
+test('B per-listener anonymous: one listener refuses anonymous clients, then global off with one exception', async () => {
+    // global anonymous stays on: 1883 alone gets listener_allow_anonymous false
+    await P.change(page, '#listeners .listener:nth-child(1) select.anon', 'false');
+    assert.match(await conf(), /^listener 1883\nlistener_allow_anonymous false$/m);
+    assert.match(await conf(), /^allow_anonymous true$/m, 'the global value is untouched');
+    assert.equal(await P.visible(page, '#auth-warning'), true);
+    assert.match(await page.evaluate(() => document.querySelector('#auth-warning').textContent), /Port 1883 kein Client/);
+    await P.restartFromPage(page);
+    await box.waitForBroker({}, U.ws);
+    assert.match(await refused(U.mqtt), /Not authorized/);
+    assert.match(await roundtrip(U.ws), /^hello-/);
+    assert.match(await roundtrip(U.mqtts), /^hello-/);
+    // the common case the other way round: global off, one listener (here WebSockets, standing
+    // in for a loopback listener) stays open
+    await P.change(page, '#listeners .listener:nth-child(1) select.anon', '');
+    await P.change(page, '#listeners .listener:nth-child(2) select.anon', 'true');
+    await P.change(page, '#allow-anonymous', 'false');
+    assert.match(await conf(), /^listener 1884\nprotocol websockets\nlistener_allow_anonymous true$/m);
+    assert.doesNotMatch(await conf(), /^listener 1883\nlistener_allow_anonymous/m);
+    assert.match(await page.evaluate(() => document.querySelector('#auth-warning').textContent), /Port 1883, 8883, 8884 kein Client/);
+    assert.match(await page.evaluate(() => document.querySelector('#listeners .listener:nth-child(1) select.anon option').textContent), /nicht erlaubt/, 'the "wie global" option shows the global value');
+    await P.restartFromPage(page);
+    await box.waitForBroker({}, U.ws);
+    assert.match(await roundtrip(U.ws), /^hello-/);
+    assert.match(await refused(U.mqtt), /Not authorized/);
+    assert.match(await refused(U.mqtts), /Not authorized/);
+    // back to the default: everything anonymous, no per-listener lines
+    await P.change(page, '#listeners .listener:nth-child(2) select.anon', '');
+    await P.change(page, '#allow-anonymous', 'true');
+    assert.doesNotMatch(await conf(), /^listener_allow_anonymous/m);
+    assert.equal(await P.visible(page, '#auth-warning'), false);
+    await P.restartFromPage(page);
+    await box.waitForBroker();
+    assert.match(await roundtrip(U.mqtt), /^hello-/);
+    assert.deepEqual(page.problems, []);
+});
+
 test('B ACL file: toggled from the page, enforced by the broker', async () => {
     await P.checkSaved(page, '#password-file', true);
     await P.checkSaved(page, '#acl-file', true);
@@ -597,13 +634,15 @@ test('B an expired session: the page shows the overlay on the next write', async
 test('B hand-written options are shown and kept, a second bridge, a missing custom certificate, a failing CGI', async () => {
     // extras in a listener block, a bridge block with an unknown key, a trailing comment
     const base = (await conf()).replace(/^listener 1883$/m, 'listener 1883\nmax_qos 1');
-    const extra = base + '\nconnection other\naddress 10.0.0.9:1883\nrestart_timeout 10 60\ntopic x/# in 0\n\n# trailing comment\n';
+    const extra = 'per_listener_settings true\n' + base + '\nconnection other\naddress 10.0.0.9:1883\nrestart_timeout 10 60\ntopic x/# in 0\n\n# trailing comment\n';
     put(box, CONFIG, extra);
     await P.reload(page, coverageEntries);
+    assert.equal(await P.visible(page, '#per-listener-hint'), true, 'hint for the deprecated per_listener_settings');
     assert.match(await page.evaluate(() => document.querySelector('#listeners .listener .help.mb-2').textContent), /max_qos 1/);
     assert.match(await page.evaluate(() => document.querySelector('#bridges .listener .help.mb-2').textContent), /restart_timeout 10 60/);
     await P.clickSaved(page, '#bridges .listener input[type=checkbox]');   // a change keeps the extras and the plugin block
     const saved = await conf();
+    assert.match(saved, /^per_listener_settings true$/m, 'the deprecated line is kept');
     assert.match(saved, /^max_qos 1$/m);
     assert.match(saved, /^restart_timeout 10 60$/m);
     assert.match(saved, /# trailing comment/);
@@ -628,6 +667,7 @@ test('B hand-written options are shown and kept, a second bridge, a missing cust
     shOk('cd /usr/local/addons/mosquitto/www && mv getconfig.off getconfig.cgi && mv update.off update.cgi');
     await P.reload(page, coverageEntries);
     assert.equal(await P.count(page, '#listeners .listener'), 4);
+    assert.equal(await P.visible(page, '#per-listener-hint'), false);
     assert.deepEqual(page.problems.filter(p => !/getconfig|update\.cgi/.test(p)), []);
 });
 
