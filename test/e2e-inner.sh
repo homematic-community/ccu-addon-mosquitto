@@ -178,6 +178,22 @@ out=`timeout 15 $BIN/mosquitto_sub -h 127.0.0.1 -u e2e -P secret -C 1 -W 10 -t r
 [ "$out" = "over-the-bridge" ] && ok "message crossed the bridge (local/ -> remote/)" || fail "bridge did not forward ('$out')"
 grep -q "Connecting bridge e2e-self" /var/log/messages && ok "bridge connection logged" || fail "no bridge connection in syslog"
 
+# --- persistence location (task 15): a directory that does not exist yet, retained survives a restart ----
+log "persistence_location on another directory (a USB stick on the CCU)"
+sed -i 's|^persistence_location .*|persistence_location /usr/local/tmp/persist-test/|' $CONFIG
+$RC restart >/dev/null || die "restart with the new persistence location"
+wait_for_broker_auth || die "broker not running after the persistence restart"
+[ -d /usr/local/tmp/persist-test ] && ok "persistence directory created by the service script" || fail "persistence directory not created"
+$BIN/mosquitto_pub -h 127.0.0.1 -u e2e -P secret -t e2e/retained -m "keep-me" -r || die "publish retained"
+$RC restart >/dev/null || die "restart"
+wait_for_broker_auth || die "broker not running after the restart"
+[ -s /usr/local/tmp/persist-test/mosquitto.db ] && ok "mosquitto.db written to the new location" || fail "no mosquitto.db in the new location"
+out=`timeout 10 $BIN/mosquitto_sub -h 127.0.0.1 -u e2e -P secret -C 1 -W 5 -t e2e/retained`
+[ "$out" = "keep-me" ] && ok "retained message survived the restart from the new location" || fail "retained message lost ('$out')"
+sed -i "s|^persistence_location .*|persistence_location $ADDON_DIR/var/|" $CONFIG
+$RC restart >/dev/null || die "restart back"
+wait_for_broker_auth || die "broker not running after switching back"
+
 # --- update (the OpenCCU live path) --------------------------------------------------
 log "update with the same package (update_script must exit 0 and restart the service)"
 cp $CONFIG /tmp/config.before

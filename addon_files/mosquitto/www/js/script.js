@@ -43,7 +43,8 @@
         'allow_duplicate_messages', 'memory_limit', 'max_inflight_bytes', 'max_queued_bytes',
         'check_retain_source', 'allow_zero_length_clientid', 'auto_id_prefix', 'clientid_prefixes'
     ]);
-    const MANAGED_GLOBALS = ['allow_anonymous', 'persistence', 'autosave_interval', 'connection_messages', 'log_type', 'password_file', 'acl_file'];
+    const MANAGED_GLOBALS = ['allow_anonymous', 'persistence', 'persistence_location', 'autosave_interval', 'connection_messages', 'log_type', 'password_file', 'acl_file'];
+    const VAR_DIR = ADDON + '/var/';
     const LISTENER_KEYS = ['protocol', 'certfile', 'keyfile', 'tls_version', 'max_connections'];
     // bridge keys with one value (topic lines are collected separately)
     const BRIDGE_KEYS = ['address', 'remote_username', 'remote_password', 'remote_clientid', 'cleansession',
@@ -152,6 +153,7 @@
         bridges: [],
         allowAnonymous: false,
         persistence: false,
+        persistenceLocation: '',   // '' = mosquitto default (the working directory)
         autosaveInterval: '',
         connectionMessages: true,
         logTypes: DEFAULT_LOG_TYPES.slice(),
@@ -181,6 +183,7 @@
         }
         state.allowAnonymous = globals.allow_anonymous === 'true';
         state.persistence = globals.persistence === 'true';
+        state.persistenceLocation = globals.persistence_location || '';
         state.autosaveInterval = globals.autosave_interval !== undefined ? globals.autosave_interval : '';
         state.connectionMessages = globals.connection_messages !== 'false';
         state.logTypesExplicit = logTypes.length > 0;
@@ -260,6 +263,7 @@
         const globals = {
             allow_anonymous: String(state.allowAnonymous),
             persistence: String(state.persistence),
+            persistence_location: state.persistenceLocation || null,
             autosave_interval: state.autosaveInterval === '' ? null : String(state.autosaveInterval),
             connection_messages: String(state.connectionMessages),
             log_type: state.logTypesExplicit ? state.logTypes.slice() : null,
@@ -300,7 +304,7 @@
             }
         }
         // managed globals the file did not have yet
-        const missing = ['allow_anonymous', 'persistence', 'autosave_interval', 'connection_messages', 'log_type']
+        const missing = ['allow_anonymous', 'persistence', 'persistence_location', 'autosave_interval', 'connection_messages', 'log_type']
             .filter(k => !written.has(k) && globals[k] !== null && globals[k] !== GLOBAL_DEFAULTS[k]);
         if (missing.length) {
             blank();
@@ -327,7 +331,7 @@
     // loaded by node for the unit test: export the model, skip the page
     if (typeof document === 'undefined') {
         module.exports = { parse, load, serialise, state, currentCert, newListener, newBridge,
-            PASSWD_FILE, ACL_FILE, PLUGIN_PASSWD, PLUGIN_ACL, CCU_CERT, ADDON_CERT, ADDON_KEY };
+            PASSWD_FILE, ACL_FILE, PLUGIN_PASSWD, PLUGIN_ACL, CCU_CERT, ADDON_CERT, ADDON_KEY, VAR_DIR };
         return;
     }
 
@@ -480,6 +484,7 @@
         $('#connection-messages').checked = state.connectionMessages;
         $('#persistence').checked = state.persistence;
         $('#autosave-interval').value = state.autosaveInterval;
+        renderPersistenceLocation();
     }
 
     // --- listeners --------------------------------------------------------------------
@@ -833,6 +838,92 @@
         state.persistence = $('#persistence').checked;
         save();
     });
+
+    // --- persistence location (task 15): addon dir, a mounted USB stick or a custom path ---
+
+    let media = []; // [{path, fs, free_mb}] from media.cgi
+
+    function locationKind(loc) {
+        const norm = (loc || '').replace(/\/+$/, '');
+        if (!norm || norm === VAR_DIR.replace(/\/$/, '')) return 'var';
+        if (media.some(m => norm === m.path || norm.startsWith(m.path + '/'))) return norm;
+        return 'custom';
+    }
+
+    // the directory used on a stick: a subdirectory, so several addons can share it
+    const stickDir = mp => mp + '/mosquitto/';
+
+    function renderPersistenceLocation() {
+        const sel = $('#persistence-location');
+        sel.innerHTML = '';
+        sel.appendChild(el('option', { value: 'var', text: 'Addon-Verzeichnis (' + VAR_DIR + ')' }));
+        for (const m of media) {
+            sel.appendChild(el('option', { value: m.path, text: `USB-Stick ${m.path} (${m.fs}, ${m.free_mb} MB frei)` }));
+        }
+        sel.appendChild(el('option', { value: 'custom', text: 'Eigener Pfad' }));
+        const kind = locationKind(state.persistenceLocation);
+        // a stick that is configured but not plugged in: keep it selectable, flagged
+        if (kind === 'custom' && /^\/media\/[^/]+/.test(state.persistenceLocation)) {
+            const mp = state.persistenceLocation.match(/^\/media\/[^/]+/)[0];
+            sel.appendChild(el('option', { value: mp, text: `USB-Stick ${mp} (nicht eingehängt)` }));
+            sel.value = mp;
+        } else {
+            sel.value = kind;
+        }
+        $('#persistence-location-custom').classList.toggle('hidden', sel.value !== 'custom');
+        $('#persistence-location-custom').value = kind === 'custom' ? state.persistenceLocation : '';
+        checkPersistenceLocation();
+    }
+
+    async function checkPersistenceLocation() {
+        const status = $('#persistence-location-status');
+        const loc = state.persistenceLocation || VAR_DIR;
+        try {
+            const c = await getJson(`media.cgi?cmd=check&sid=${sid}&file=${encodeURIComponent(loc)}`);
+            if (c.error) { status.textContent = ''; return; }
+            if (!c.mounted) {
+                status.innerHTML = `<span style="color:#dc3545">${loc}: kein USB-Stick eingehängt - Mosquitto kann dort nicht speichern.</span>`;
+            } else if (!c.exists) {
+                status.textContent = `${loc}: Verzeichnis fehlt, wird beim Start von Mosquitto angelegt.`;
+            } else if (!c.writable) {
+                status.innerHTML = `<span style="color:#dc3545">${loc}: nicht beschreibbar.</span>`;
+            } else {
+                status.textContent = `${loc}: ${c.fs || ''} ${c.free_mb} MB frei`;
+            }
+        } catch (e) {
+            status.textContent = '';
+        }
+    }
+
+    async function loadMedia() {
+        try {
+            const data = await getJson('media.cgi?cmd=list&sid=' + sid);
+            media = data.media || [];
+        } catch (e) {
+            media = [];
+        }
+        renderPersistenceLocation();
+    }
+
+    $('#persistence-location').addEventListener('change', () => {
+        const v = $('#persistence-location').value;
+        $('#persistence-location-custom').classList.toggle('hidden', v !== 'custom');
+        if (v === 'var') state.persistenceLocation = VAR_DIR;
+        else if (v === 'custom') { $('#persistence-location-custom').focus(); return; }
+        else state.persistenceLocation = stickDir(v);
+        checkPersistenceLocation();
+        save();
+    });
+    $('#persistence-location-custom').addEventListener('change', () => {
+        let v = $('#persistence-location-custom').value.trim();
+        if (!v.startsWith('/')) { $('#persistence-location-custom').classList.add('is-invalid'); return; }
+        $('#persistence-location-custom').classList.remove('is-invalid');
+        if (!v.endsWith('/')) v += '/';
+        state.persistenceLocation = v;
+        checkPersistenceLocation();
+        save();
+    });
+    $('#persistence-location-refresh').addEventListener('click', loadMedia);
     $('#autosave-interval').addEventListener('change', () => {
         const v = $('#autosave-interval').value.trim();
         state.autosaveInterval = v === '' ? '' : String(Math.max(0, parseInt(v, 10) || 0));
@@ -1068,6 +1159,7 @@
 
     loadConfig()
         .then(loadFirewall)
+        .then(loadMedia)
         .catch(e => { if (e.message !== 'invalid session') toast('Konfiguration konnte nicht geladen werden: ' + e.message, 'danger', 8000); });
     pollStatus();
     checkUpdate();

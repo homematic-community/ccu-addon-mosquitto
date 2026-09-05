@@ -87,6 +87,28 @@ Start() {
         log warn "$CONFIG was missing, default configuration restored"
     fi
 
+    # The persistence location may be a directory on a USB stick
+    # (/media/usbN/mosquitto/, settings page). Create it when missing, but
+    # never below /media unless the stick is really mounted there: /media is
+    # a tmpfs with empty mount points, a directory created on it would take
+    # the data silently and lose it at the next reboot.
+    PERSIST=`grep '^[[:space:]]*persistence_location' $CONFIG 2>/dev/null | tail -1 | awk '{print $2}'`
+    if [ -n "$PERSIST" ] && [ ! -d "$PERSIST" ]; then
+        case $PERSIST in
+            /media/*)
+                MP=`echo "$PERSIST" | cut -d/ -f1-3`
+                if grep -q " $MP " /proc/mounts 2>/dev/null; then
+                    mkdir -p "$PERSIST" && log info "created persistence directory $PERSIST"
+                else
+                    log warn "persistence location $PERSIST: no USB stick mounted at $MP, Mosquitto cannot save there"
+                fi
+                ;;
+            *)
+                mkdir -p "$PERSIST" && log info "created persistence directory $PERSIST"
+                ;;
+        esac
+    fi
+
     echo -n "Starting Mosquitto: "
     log info "Starting Mosquitto $MOSQUITTO_VERSION (ccu-addon-mosquitto $VERSION_ADDON) https://github.com/homematic-community/ccu-addon-mosquitto"
     # Mosquitto must not inherit a working directory that can vanish (the

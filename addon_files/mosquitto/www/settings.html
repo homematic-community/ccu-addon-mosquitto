@@ -165,13 +165,21 @@
             <div class="card-body">
                 <span class="card-title">Persistenz</span>
                 <div class="form-row">
-                    <label><input type="checkbox" id="persistence"> Retained Messages und Subscriptions in <code>var/mosquitto.db</code> speichern</label>
+                    <label><input type="checkbox" id="persistence"> Retained Messages und Subscriptions in <code>mosquitto.db</code> speichern</label>
                 </div>
+                <div class="form-row">
+                    <label class="w-md">Speicherort</label>
+                    <select id="persistence-location" class="w-lg"></select>
+                    <input type="text" id="persistence-location-custom" class="grow hidden" placeholder="/pfad/zum/verzeichnis/">
+                    <button id="persistence-location-refresh" type="button" class="btn btn-outline" title="USB-Sticks neu einlesen">&#8635;</button>
+                </div>
+                <div id="persistence-location-status" class="help mb-2"></div>
                 <div class="form-row">
                     <label class="w-md">autosave_interval</label>
                     <input type="number" id="autosave-interval" class="w-sm" min="0" step="1">
                     <span class="help">Sekunden, 0 = nur beim Beenden</span>
                 </div>
+                <div class="help">Ein USB-Stick (von der CCU unter <code>/media/usb…</code> eingehängt) schont die SD-Karte. Ist der Stick beim Start nicht eingehängt, startet Mosquitto ohne gespeicherte Daten und meldet Fehler beim Speichern im Log.</div>
             </div>
         </div>
 

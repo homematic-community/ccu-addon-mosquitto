@@ -168,6 +168,21 @@ test('parse keeps CRLF files readable', () => {
     assert.strictEqual(items.length, 2);
 });
 
+test('persistence location: default parsed, USB stick path written in place, absent stays absent', () => {
+    load(DEFAULT);
+    assert.strictEqual(state.persistenceLocation, model.VAR_DIR);
+    state.persistenceLocation = '/media/usb1/mosquitto/';
+    let out = serialise();
+    assert.ok(out.includes('persistence true\npersistence_location /media/usb1/mosquitto/\nautosave_interval 1800\n'), out);
+    load(out);
+    assert.strictEqual(state.persistenceLocation, '/media/usb1/mosquitto/');
+    load('listener 1883\n');
+    assert.strictEqual(state.persistenceLocation, '');
+    assert.strictEqual(serialise(), 'listener 1883\n');
+    state.persistenceLocation = '/tmp/p/';
+    assert.strictEqual(serialise(), 'listener 1883\n\npersistence_location /tmp/p/\n');
+});
+
 // --- bridges (task 11) -------------------------------------------------------------
 
 const BRIDGE = 'listener 1883\n\nconnection cloud\naddress broker.example.org:8883 backup.example.org:8883\nremote_username ccu\nremote_password secret\nremote_clientid ccu-bridge\ncleansession true\nbridge_protocol_version mqttv50\nbridge_cafile /etc/ssl/certs/ca.pem\nbridge_insecure true\nnotifications false\ntry_private false\ntopic # both 0\ntopic sensor/# out 1 local/ remote/\nrestart_timeout 10 60\n\nallow_anonymous true\n';
