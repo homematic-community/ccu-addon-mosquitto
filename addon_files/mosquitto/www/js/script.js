@@ -161,6 +161,7 @@
         passwordFile: '',      // '' = off
         aclFile: '',
         certSource: 'ccu',
+        customChosen: false,
         certfile: CCU_CERT,
         keyfile: CCU_CERT,
         tlsVersion: ''
@@ -196,7 +197,9 @@
             if (p.path.endsWith('/mosquitto_acl_file.so')) state.aclFile = p.opts.acl_file || ACL_FILE;
         }
 
-        state.certSource = 'ccu';
+        // the certificate source is derived from the paths in use, unless the
+        // user picked "custom" (its paths may still equal the addon's or CCU's)
+        if (!state.customChosen) state.certSource = 'ccu';
         state.certfile = CCU_CERT;
         state.keyfile = CCU_CERT;
         state.tlsVersion = '';
@@ -204,7 +207,8 @@
         if (tls) {
             state.certfile = tls.certfile;
             state.keyfile = tls.keyfile;
-            if (tls.certfile === CCU_CERT) state.certSource = 'ccu';
+            if (state.customChosen) state.certSource = 'custom';
+            else if (tls.certfile === CCU_CERT) state.certSource = 'ccu';
             else if (tls.certfile === ADDON_CERT) state.certSource = 'addon';
             else state.certSource = 'custom';
             const v = state.listeners.find(l => l.tls && l.tls_version);
@@ -448,6 +452,7 @@
         try {
             const result = (await post('setconfig.cgi?sid=' + sid, text)).trim();
             if (result === 'ok') {
+                window.saveCount = (window.saveCount || 0) + 1;   // tests wait on this
                 $('#apply-bar').classList.remove('hidden');
                 // re-parse what was written so the items reflect the file
                 load(text);
@@ -709,6 +714,12 @@
 
     $('#cert-source').addEventListener('change', () => {
         state.certSource = $('#cert-source').value;
+        state.customChosen = state.certSource === 'custom';
+        if (state.certSource === 'custom') {
+            // start from the paths in use, so the inputs show what gets written
+            $('#cert-certfile').value = state.certfile;
+            $('#cert-keyfile').value = state.keyfile;
+        }
         renderCert();
         if (state.certSource !== 'custom' || (state.certfile && state.keyfile)) save();
     });
