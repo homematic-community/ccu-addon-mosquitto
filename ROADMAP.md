@@ -41,7 +41,6 @@ releases. **`2.1.2+0` was released on 2026-09-05** (task 10); from now on
 - 15. Persistence on a USB stick, configurable in the UI ✅ [archived](roadmap-archive/task-15.md)
 - 16. Tests in Node.js: unit, CGI integration, web UI end to end, coverage ✅ [archived](roadmap-archive/task-16.md)
 - [17. Per-listener authentication](#17-per-listener-authentication)
-- [18. ACL editing in the UI (questionable)](#18-acl-editing-in-the-ui-questionable)
 - [Out of scope](#out-of-scope)
 
 ## 14. Follow-ups and ideas
@@ -92,40 +91,16 @@ the page writes one `allow_anonymous` for the whole broker.
   `allow_anonymous` per listener block in its `mosquitto-conf.js` and
   shows a card per listener — same shape as our listener cards.
 
-## 18. ACL editing in the UI (questionable)
-
-Maintainer's request (2026-09-05), **marked questionable by the
-maintainer**: the tendency is the same as for DynSec below —
-anyone who needs topic ACLs has a setup sophisticated enough to be
-managed by [she](https://github.com/hobbyquaker/she) rather than by an
-addon settings page. Kept here so the UX idea is not lost; decide before
-starting.
-
-- Today: `acl_file` is written by the page (path only), the file itself
-  is maintained on the command line; "Konfiguration neu laden" picks up
-  changes. The password-file plugin (`mosquitto_password_file.so`) does
-  the users, the ACL file is the classic `acl_file` format
-  (`topic [read|write|readwrite|deny] <topic>`, `user <name>`,
-  `pattern … %u/%c`).
-- UX sketch if it is done: one table on the "Authentifizierung" card —
-  rows of (scope: anonymous / user *x* / pattern) × (access) × (topic),
-  with the users pulled from the password file so a user is a dropdown,
-  not free text; "deny" rows first as Mosquitto evaluates them; a
-  read-only preview of the generated file; save writes the file and
-  sends SIGHUP (reload, no restart). Unknown lines pass through verbatim
-  like in `mosquitto.conf`.
-- Prior art in she: ACLs are **not** edited as a file at all — she uses
-  the DynSec plugin (roles with ACL rules of type
-  `publishClientSend` / `publishClientReceive` / `subscribePattern` /
-  `unsubscribePattern`, allow/deny, priority; users and groups get roles)
-  over the `$CONTROL/dynamic-security/v1` topic, live, no reload
-  (`doc/broker-management.md`, "Users & Roles" tab, `she.broker.*`
-  script API, HTTP API under `/she/broker/*`). That model is richer than
-  the ACL file and is the reason this task is questionable: a file-based
-  ACL editor would be a second, weaker way to do what she already does.
-
 ## Out of scope
 
+- **ACL editing in the UI** (was task 18, decided 2026-09-05). `acl_file`
+  stays a path written by the page, the file itself is maintained on the
+  command line (classic `topic`/`user`/`pattern` format, "Konfiguration
+  neu laden" picks up changes). Anyone who needs topic ACLs has a setup
+  sophisticated enough for [she](https://github.com/hobbyquaker/she),
+  which manages users, roles and ACLs through the DynSec plugin live and
+  without reload — a file-based ACL editor here would be a second,
+  weaker way to do the same thing.
 - **DynSec configuration UI.** The Dynamic Security plugin is bundled
   (`mosquitto_ctrl dynsec` works on the command line), but the addon
   will not get a UI for users/roles/groups. Anyone who wants that should
