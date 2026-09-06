@@ -37,10 +37,12 @@ echo ""
 echo "Build ccu-addon-mosquitto $VERSION_ADDON ($ARCH)"
 echo ""
 
+# EXPECT_LOADER is the musl loader only a binary of that architecture asks for;
+# the self-check below refuses to package anything else (see there).
 case $ARCH in
-  armv7l)  PLATFORM=linux/arm/v7 ;;
-  aarch64) PLATFORM=linux/arm64 ;;
-  x86_64)  PLATFORM=linux/amd64 ;;
+  armv7l)  PLATFORM=linux/arm/v7; EXPECT_LOADER=ld-musl-armhf.so.1 ;;
+  aarch64) PLATFORM=linux/arm64;  EXPECT_LOADER=ld-musl-aarch64.so.1 ;;
+  x86_64)  PLATFORM=linux/amd64;  EXPECT_LOADER=ld-musl-x86_64.so.1 ;;
   *)
     echo "usage: $0 <armv7l|aarch64|x86_64>" >&2
     exit 1
@@ -62,6 +64,14 @@ mkdir $ADDON_TMP 2> /dev/null || rm -rf $ADDON_TMP/* $ADDON_TMP/.[!.]* 2>/dev/nu
 mkdir -p $OUT
 
 # --- compile mosquitto in the container ---------------------------------------------
+
+# Pull the image for this platform explicitly. `docker run --platform` alone is
+# not enough: when the tag is already in the local image store from a previous
+# architecture's build (build.sh runs all three in a row), some Docker versions
+# reuse that image and ignore --platform - which is how every aarch64 release up
+# to 2.1.2+2 ended up carrying armv7l binaries.
+echo "pulling alpine:$ALPINE_TAG for $PLATFORM ..."
+docker pull -q --platform $PLATFORM alpine:$ALPINE_TAG || exit 1
 
 echo "building mosquitto $MOSQUITTO_VERSION in alpine:$ALPINE_TAG ($PLATFORM) ..."
 docker run --rm --platform $PLATFORM \
@@ -132,6 +142,18 @@ copy_closure $ELFS || exit 1
 
 # the ELF interpreter itself (musl's loader), which is not a DT_NEEDED entry
 LOADER=`patchelf --print-interpreter $ADDON/bin/mosquitto`
+
+# The binaries must really be for $ARCH. The loader name says which architecture
+# the container was, and a package labelled for one architecture but built for
+# another passes update_script's `uname -m` check and then cannot run at all -
+# every aarch64 release up to 2.1.2+2 was in fact armv7l, because Docker reused
+# the previous build's cached image for the tag. Never package that again.
+if [ "`basename $LOADER`" != "$EXPECT_LOADER" ]; then
+    echo "error: $ARCH build produced binaries for `basename $LOADER`, expected $EXPECT_LOADER" >&2
+    echo "       (the alpine:$ALPINE_TAG container was not $PLATFORM)" >&2
+    exit 1
+fi
+
 [ -e $ADDON/lib/`basename $LOADER` ] || cp -a $SRCROOT$LOADER $ADDON/lib/`basename $LOADER`
 
 # Point everything inside the addon: absolute prefix path first (the
