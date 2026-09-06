@@ -1,3 +1,17 @@
+### Wichtig: 2.1.2+3 repariert die aarch64-Pakete
+
+**Alle bisherigen aarch64-Pakete (`2.1.2+0`, `2.1.2+1`, `2.1.2+2`) enthalten 32-Bit-ARM-Binaries**
+(armv7l) und laufen auf einer 64-Bit-Zentrale nicht. Die Datei war korrekt benannt und meldete
+`ADDON_ARCH=aarch64`, sodass die Installation durchlief und Mosquitto anschließend nicht startete.
+Ursache: der Build baut die drei Architekturen nacheinander im selben Job, und Docker hat für den
+aarch64-Lauf das bereits lokal liegende armv7l-Image der Alpine-Tag-Referenz wiederverwendet statt
+das arm64-Image zu holen.
+
+Behoben in `2.1.2+3`: der Build holt das Image je Plattform explizit und **bricht ab**, wenn die
+erzeugten Binaries nicht zum Ziel passen (geprüft am musl-Loader, `ld-musl-aarch64.so.1` &c.).
+**Wer eine aarch64-Zentrale hat (OpenCCU rpi3/rpi4/rpi5, oci_arm64), installiert bitte
+`mosquitto-aarch64-2.1.2+3.tar.gz`.** armv7l und x86_64 waren nie betroffen.
+
 ### Neu in 2.1.2+2: openccu-lite, Paketnamen
 
 - **[openccu-lite](https://github.com/hobbyquaker/openccu-lite)** – die CCU-Firmware ohne ReGaHSS

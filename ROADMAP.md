@@ -29,6 +29,10 @@ page's session check, which its `tclrega.so` shim answers, and the two places
 that assumed busybox syslog and a root-owned `/var/run` now detect the box at
 runtime. Every architecture is published as `mosquitto-<arch>-<version>.tar.gz`
 (armv7l additionally under its historical name), and a pushed tag releases.
+`2.1.2+3` (2026-09-06) fixes a release bug task 19's verification uncovered: **every**
+aarch64 package so far (`2.1.2+0` … `2.1.2+2`) held armv7l binaries, because the three
+builds share one job and Docker reused the cached image for the tag (task 20). The build
+now pulls per platform and refuses to package binaries that do not match the target.
 
 ## Contents
 
@@ -50,6 +54,7 @@ runtime. Every architecture is published as `mosquitto-<arch>-<version>.tar.gz`
 - 16. Tests in Node.js: unit, CGI integration, web UI end to end, coverage ✅ [archived](roadmap-archive/task-16.md)
 - 17. Per-listener authentication ✅ [archived](roadmap-archive/task-17.md)
 - 19. openccu-lite: run unchanged on a CCU without ReGaHSS ✅ [archived](roadmap-archive/task-19.md)
+- 20. Every aarch64 release so far was an armv7l package ✅ [archived](roadmap-archive/task-20.md)
 - [Out of scope](#out-of-scope)
 
 ## 14. Follow-ups and ideas
