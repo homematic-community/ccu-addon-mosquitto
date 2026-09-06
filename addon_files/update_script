@@ -27,6 +27,11 @@ fi
 mkdir -p $ADDONS_DIR && chmod 755 $ADDONS_DIR
 mkdir -p $CONF_DIR/addons/www && chmod 755 $CONF_DIR/addons/www
 mkdir -p $CONF_DIR/rc.d
+# The per-addon configuration directory. Nothing on a CCU uses it, but
+# openccu-lite names it as a writable path in the unit it generates when the
+# addon runs as its own user (D-36), and systemd refuses to start a unit whose
+# ReadWritePaths does not exist - so it has to be there before the first start.
+mkdir -p $CONF_DIR/addons/mosquitto
 
 #
 #   Stop the service on an update

@@ -40,4 +40,11 @@ section "iptables INPUT" {exec /usr/sbin/iptables -L INPUT -vn}
 if {[file exists /var/log/messages.0]} {
     section "/var/log/messages.0" {exec grep -i mosquitto /var/log/messages.0}
 }
-section "/var/log/messages" {exec grep -i mosquitto /var/log/messages}
+if {[file exists /var/log/messages]} {
+    section "/var/log/messages" {exec grep -i mosquitto /var/log/messages}
+} else {
+    # a systemd box (openccu-lite, D-30) has no busybox syslogd: the same lines
+    # are in the journal, plus whatever the addon's own unit printed
+    section "journal (mosquitto)" {exec journalctl -t mosquitto -n 500 --no-pager}
+    section "journal (addon-mosquitto.service)" {exec journalctl -u addon-mosquitto.service -n 200 --no-pager}
+}

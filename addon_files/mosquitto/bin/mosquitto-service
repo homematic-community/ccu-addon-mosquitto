@@ -10,6 +10,13 @@ ADDON_DIR=/usr/local/addons/mosquitto
 WWW_DIR=$CONF_DIR/addons/www/mosquitto
 CONFIG=$ADDON_DIR/etc/mosquitto.conf
 PIDFILE=/var/run/mosquitto.pid
+# On a CCU (and on openccu-lite in its default "root" mode) everything here runs
+# as root and the pid file stays where it has always been. openccu-lite can run
+# an addon as its own user instead (addon-mosquitto, D-36); /var/run then belongs
+# to root and start-stop-daemon cannot create a file in it, so the pid file moves
+# into the addon's own directory. Pid() finds a broker either way - it falls back
+# to scanning /proc for $DAEMON when the pid file is not where it looks.
+[ "`id -u`" = "0" ] || PIDFILE=$ADDON_DIR/var/mosquitto.pid
 DAEMON=$ADDON_DIR/bin/mosquitto
 # absolute: a CGI's PATH may lack /sbin
 SSD=/sbin/start-stop-daemon
@@ -145,6 +152,12 @@ Status() {
         # $(...) instead of backticks: the backslashes for tr would be eaten;
         # quotes and backslashes are dropped rather than escaped (JSON)
         err=$(grep "mosquitto\[" /var/log/messages 2>/dev/null | grep -i "error\|unable\|failed" | tail -1 | sed -e 's/.*mosquitto\[[0-9]*\]: //' -e 's/^[0-9]*: //' | tr -d '"\\')
+        # A box without busybox syslogd logs to the journal instead (openccu-lite
+        # uses systemd/journald and has no /var/log/messages). Same line, same
+        # field - and on a CCU the file exists, so nothing here runs.
+        if [ -z "$err" ] && [ ! -f /var/log/messages ] && command -v journalctl >/dev/null 2>&1; then
+            err=$(journalctl -t mosquitto -n 200 --no-pager -o cat 2>/dev/null | grep -i "error\|unable\|failed" | tail -1 | sed -e 's/^[0-9]*: //' | tr -d '"\\')
+        fi
         echo "{\"running\":false,\"lastError\":\"$err\"}"
         return 1
     fi
@@ -204,6 +217,8 @@ case "$1" in
         rm -f $CONF_DIR/rc.d/mosquitto
         rm -f $WWW_DIR
         rm -rf $ADDON_DIR
+        # only when it is still empty - never throw away what somebody put there
+        rmdir $CONF_DIR/addons/mosquitto 2>/dev/null
         log info "Uninstalled ccu-addon-mosquitto"
     ;;
 
