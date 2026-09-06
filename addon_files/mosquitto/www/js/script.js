@@ -359,7 +359,7 @@
     // --- session and http ------------------------------------------------------
 
     const sidMatch = location.search.match(/sid=(@[0-9a-zA-Z]{10}@)/);
-    const sid = sidMatch ? sidMatch[1] : '';
+    const sid = sidMatch ? sidMatch[1] : ''; let lastRequestTime = 0; async function throttleRequest() { const now = Date.now(); const wait = lastRequestTime + 300 - now; lastRequestTime = Math.max(now, lastRequestTime + 300); if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait)); }
 
     function invalidSession() {
         $('#invalidSession').style.display = 'block';
@@ -367,7 +367,7 @@
     }
 
     async function get(url) {
-        const res = await fetch(url + (url.includes('?') ? '&' : '?') + '_=' + Date.now());
+        await throttleRequest(); const res = await fetch(url + (url.includes('?') ? '&' : '?') + '_=' + Date.now());
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const text = await res.text();
         if (text.trim() === 'error: invalid session') {
@@ -387,7 +387,7 @@
     }
 
     async function post(url, body) {
-        const res = await fetch(url, { method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+        await throttleRequest(); const res = await fetch(url, { method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const text = await res.text();
         if (text.trim() === 'error: invalid session') {
