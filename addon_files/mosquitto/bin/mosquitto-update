@@ -189,15 +189,19 @@ fi
 
 ARCH=`uname -m`
 case $ARCH in
-    armv7l) FILE=mosquitto-$VERSION.tar.gz ;;
-    x86_64|aarch64) FILE=mosquitto-$ARCH-$VERSION.tar.gz ;;
+    armv7l|x86_64|aarch64) FILE=mosquitto-$ARCH-$VERSION.tar.gz ;;
     *) fail "Nicht unterstützte Architektur: $ARCH" ;;
 esac
-if [ -n "$MOSQUITTO_UPDATE_BASE_URL" ]; then
-    URL=$MOSQUITTO_UPDATE_BASE_URL/`urlenc "$FILE"`
-else
-    URL=$RELEASES_URL/`urlenc "$VERSION"`/`urlenc "$FILE"`
-fi
+# Releases before 2.1.2+2 named the armv7l package without the architecture;
+# that name is still published, so either resolves. asset_url <file>.
+asset_url() {
+    if [ -n "$MOSQUITTO_UPDATE_BASE_URL" ]; then
+        echo "$MOSQUITTO_UPDATE_BASE_URL/`urlenc "$1"`"
+    else
+        echo "$RELEASES_URL/`urlenc "$VERSION"`/`urlenc "$1"`"
+    fi
+}
+URL=`asset_url "$FILE"`
 
 # --- preflight ---------------------------------------------------------------
 
@@ -256,6 +260,14 @@ log "installed $INSTALLED, target $VERSION, arch $ARCH, free $((FREE_KB / 1024))
 set_state download "Lade $FILE herunter ..."
 
 SHA=`curl -fsSL --max-time 30 "$URL.sha256" 2>>$LOG | awk '{print $1}'`
+if [ -z "$SHA" ] && [ "$ARCH" = "armv7l" ]; then
+    # an older release that only has the unqualified name
+    FILE=mosquitto-$VERSION.tar.gz
+    URL=`asset_url "$FILE"`
+    log "falling back to $FILE"
+    set_state download "Lade $FILE herunter ..."
+    SHA=`curl -fsSL --max-time 30 "$URL.sha256" 2>>$LOG | awk '{print $1}'`
+fi
 [ -n "$SHA" ] || fail "Die Prüfsumme für $FILE konnte nicht geladen werden ($URL.sha256)"
 
 rm -f $ARCHIVE.part

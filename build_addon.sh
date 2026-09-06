@@ -206,19 +206,31 @@ cat $VERSION_FILE
 
 # --- package -------------------------------------------------------------------
 
+# Every package is named after its architecture (`uname -m`), which is what
+# the openccu-lite addon catalogue resolves (mosquitto-<arch>-<version>.tar.gz,
+# docs/catalog-format.md). armv7l is additionally published under the name it
+# has had since the 1.5.8 releases, mosquitto-<version>.tar.gz - the same bytes
+# under two names: the catalogue's universal fallback, the link in every forum
+# post, and what an installed addon older than 2.1.2+2 asks its self-update for.
+ADDON_FILE=mosquitto-$ARCH-$VERSION_ADDON.tar.gz
 if [ "$ARCH" == "armv7l" ]; then
-    ADDON_FILE=mosquitto-$VERSION_ADDON.tar.gz
+    LEGACY_FILE=mosquitto-$VERSION_ADDON.tar.gz
 else
-    ADDON_FILE=mosquitto-$ARCH-$VERSION_ADDON.tar.gz
+    LEGACY_FILE=
 fi
 
 echo "compressing addon package $ADDON_FILE ..."
 cd $ADDON_TMP
-tar --owner=root --group=root -czf $BUILD_DIR/dist/$ADDON_FILE *
+tar --owner=root --group=root -czf $BUILD_DIR/dist/$ADDON_FILE * || exit 1
 cd $BUILD_DIR/dist
 # bare file name in the checksum file, so `sha256sum -c` works anywhere
 sha256sum $ADDON_FILE > $ADDON_FILE.sha256
+if [ -n "$LEGACY_FILE" ]; then
+    cp -f $ADDON_FILE $LEGACY_FILE || exit 1
+    sha256sum $LEGACY_FILE > $LEGACY_FILE.sha256
+fi
 cd $BUILD_DIR
 
 ls -la dist/$ADDON_FILE dist/$ADDON_FILE.sha256
+[ -n "$LEGACY_FILE" ] && ls -la dist/$LEGACY_FILE dist/$LEGACY_FILE.sha256
 echo "done."

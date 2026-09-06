@@ -28,6 +28,7 @@ cat >RELEASE_BODY.md <<EOL
 ### Downloads
 
 #### CCU3 (Firmware ab 3.61.5), piVCCU3 und OpenCCU Varianten _rpi2_, _tinkerboard_ und _oci_arm_ (armv7l)
+`link mosquitto-armv7l-$VERSION_ADDON.tar.gz`
 `link mosquitto-$VERSION_ADDON.tar.gz`
 EOL
 
@@ -49,7 +50,8 @@ cat >>RELEASE_BODY.md <<EOL
 
 Das Paket wird über die CCU (Einstellungen > Systemsteuerung > Zusatzsoftware) installiert; ein bereits
 installiertes Addon aktualisiert sich auch selbst über die Schaltfläche in der Mosquitto-Konfiguration.
-Zu jedem Paket gehört eine \`.sha256\`-Datei mit der Prüfsumme.
+Zu jedem Paket gehört eine \`.sha256\`-Datei mit der Prüfsumme. Die beiden armv7l-Dateien sind
+dieselbe Datei unter zwei Namen (mit Architektur wie bei den anderen beiden, und der gewohnte ohne).
 EOL
 
 # automatic releases: what triggered this one (written by update_versions.js --apply)
