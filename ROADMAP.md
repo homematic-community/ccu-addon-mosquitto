@@ -22,7 +22,13 @@ process control, self-update; CI, e2e and parser tests, automatic
 releases. **`2.1.2+0` was released on 2026-09-05** (task 10); from now on
 `auto-release.yml` publishes a new package for every Mosquitto release.
 `2.1.2+1` (2026-09-05) added per-listener authentication (task 17) and a
-flatter top bar.
+flatter top bar. `2.1.2+2` (2026-09-06) makes the package run unchanged on
+[openccu-lite](https://github.com/hobbyquaker/openccu-lite), the CCU firmware
+without ReGaHSS and with systemd (task 19): the only ReGa call is the settings
+page's session check, which its `tclrega.so` shim answers, and the two places
+that assumed busybox syslog and a root-owned `/var/run` now detect the box at
+runtime. Every architecture is published as `mosquitto-<arch>-<version>.tar.gz`
+(armv7l additionally under its historical name), and a pushed tag releases.
 
 ## Contents
 
@@ -43,6 +49,7 @@ flatter top bar.
 - 15. Persistence on a USB stick, configurable in the UI ✅ [archived](roadmap-archive/task-15.md)
 - 16. Tests in Node.js: unit, CGI integration, web UI end to end, coverage ✅ [archived](roadmap-archive/task-16.md)
 - 17. Per-listener authentication ✅ [archived](roadmap-archive/task-17.md)
+- 19. openccu-lite: run unchanged on a CCU without ReGaHSS ✅ [archived](roadmap-archive/task-19.md)
 - [Out of scope](#out-of-scope)
 
 ## 14. Follow-ups and ideas

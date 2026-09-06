@@ -1,6 +1,6 @@
 {
   "name": "ccu-addon-mosquitto",
-  "version": "2.1.2+1",
+  "version": "2.1.2+2",
   "description": "Mosquitto MQTT broker packaged as Homematic CCU addon",
   "repository": "github:homematic-community/ccu-addon-mosquitto",
   "private": true,
