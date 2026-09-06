@@ -1,3 +1,18 @@
+### Neu in 2.1.2+2: openccu-lite, Paketnamen
+
+- **[openccu-lite](https://github.com/hobbyquaker/openccu-lite)** – die CCU-Firmware ohne ReGaHSS
+  und mit systemd – wird unterstützt, mit demselben Paket. Das Addon spricht die ReGa nur für die
+  Sitzungsprüfung der Konfigurationsseite an, und genau diesen Aufruf beantwortet deren
+  `tclrega.so`-Shim. Zwei Stellen erkennen die Zentrale jetzt zur Laufzeit: die letzte
+  Fehlermeldung eines fehlgeschlagenen Starts und der Log-Download kommen aus dem systemd-Journal,
+  wenn es kein `/var/log/messages` gibt, und die PID-Datei liegt im Addon-Verzeichnis statt unter
+  `/var/run`, wenn der Dienst nicht als root läuft. Auf CCU3 und OpenCCU ändert sich dadurch
+  nichts. Details und Einschränkungen stehen im Abschnitt _openccu-lite_ der README.
+- **Paketnamen:** das armv7l-Paket heißt jetzt auch `mosquitto-armv7l-<version>.tar.gz` und liegt
+  zusätzlich weiterhin als `mosquitto-<version>.tar.gz` bei – dieselbe Datei unter beiden Namen.
+  Damit finden Addon-Kataloge alle drei Architekturen unter einem einheitlichen Schema, und alte
+  Links funktionieren weiter.
+
 ### Mosquitto 2.1 statt 1.5.8 – bitte vor dem Update lesen
 
 Dieses Release ersetzt das seit 2022 nicht mehr gepflegte Paket 1.5.8+4 durch ein komplett neu

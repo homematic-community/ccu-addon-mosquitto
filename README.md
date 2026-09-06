@@ -15,8 +15,9 @@ Der MQTT-Broker [Mosquitto](https://mosquitto.org/) als Addon für die
   `mosquitto_ctrl` und `mosquitto_passwd`.
 * Konfigurationsseite in der CCU-Oberfläche: Listener, Zertifikat, Authentifizierung mit
   Benutzerverwaltung, Logging, Persistenz, Prozesssteuerung, Log-Download und Update per Klick.
-* Läuft auf der CCU3 (armv7l) und auf OpenCCU in den 64-bit-ARM- (aarch64) und x86_64-Varianten;
-  die Binaries bringen ihre Laufzeitumgebung (musl, OpenSSL 3) selbst mit.
+* Läuft auf der CCU3 (armv7l), auf OpenCCU in den 64-bit-ARM- (aarch64) und x86_64-Varianten und
+  auf [openccu-lite](#openccu-lite); die Binaries bringen ihre Laufzeitumgebung (musl, OpenSSL 3)
+  selbst mit.
 * Für jede Mosquitto-Version erscheint automatisch ein Release, siehe [Versionen](#versionen).
 
 ## Installation
@@ -26,9 +27,14 @@ Der MQTT-Broker [Mosquitto](https://mosquitto.org/) als Addon für die
 
    | Paket | Zentrale |
    | --- | --- |
-   | `mosquitto-<version>.tar.gz` | CCU3 (Original-Firmware), piVCCU3, OpenCCU _rpi2_, _tinkerboard_, _oci_arm_ (armv7l) |
+   | `mosquitto-armv7l-<version>.tar.gz` (= `mosquitto-<version>.tar.gz`) | CCU3 (Original-Firmware), piVCCU3, OpenCCU _rpi2_, _tinkerboard_, _oci_arm_ (armv7l) |
    | `mosquitto-aarch64-<version>.tar.gz` | OpenCCU _rpi3_, _rpi4_, _rpi5_, _oci_arm64_ (aarch64) |
    | `mosquitto-x86_64-<version>.tar.gz` | OpenCCU _ova_, _intelnuc_, _oci_amd64_ (x86_64) |
+
+   Das armv7l-Paket liegt seit `2.1.2+2` unter beiden Namen bei – dieselbe Datei: der Name mit
+   Architektur ist der einheitliche (und der, den Addon-Kataloge auflösen), der ohne der seit den
+   1.5.8-Releases gewohnte. Der Dateiname entscheidet nichts, das Paket prüft beim Installieren
+   selbst, ob es zur Architektur passt.
 
 2. In der CCU unter _Einstellungen > Systemsteuerung > Zusatzsoftware_ hochladen und installieren.
    Die Original-Firmware der CCU3 startet dazu neu, OpenCCU installiert direkt.
@@ -107,6 +113,78 @@ installieren_: das Paket wird von GitHub geladen, die Prüfsumme geprüft und wi
 Zusatzsoftware-Seite installiert; Konfiguration und Persistenz bleiben erhalten. Alternativ das
 neue Paket manuell über die Zusatzsoftware-Seite hochladen.
 
+## openccu-lite
+
+[openccu-lite](https://github.com/hobbyquaker/openccu-lite) ist eine CCU-Firmware ohne ReGaHSS
+(kein `rega.exe`, keine Systemvariablen, keine Programme, kein HM-Script) mit systemd statt
+busybox-init. Das Addon läuft dort **unverändert** – dasselbe Paket wie auf CCU3 und OpenCCU, keine
+eigene Variante, keine zusätzliche Konfiguration.
+
+Das Addon spricht mit der ReGa an genau einer Stelle: der Sitzungsprüfung der Konfigurationsseite
+(`rega_script "Write(system.GetSessionVarStr('…'))"` in `lib/session.tcl`). Genau diesen Aufruf
+beantwortet openccu-lite mit seinem `tclrega.so`-Shim, deshalb funktionieren Anmeldung und alle
+CGIs wie gewohnt. Broker, Listener, TLS, Authentifizierung, Bridges, Persistenz, Prozesssteuerung,
+Firewall-Freigabe und das Update per Klick brauchen die ReGa nicht und verhalten sich identisch.
+
+Unterschiede, die man kennen sollte:
+
+* **Log:** openccu-lite protokolliert in den systemd-Journal, ein `/var/log/messages` gibt es nicht.
+  `log_dest syslog` bleibt richtig – die Zeilen landen über `/dev/log` im Journal und sind mit
+  `journalctl -t mosquitto` bzw. `journalctl -u addon-mosquitto` zu sehen. Die Prozesskarte holt die
+  letzte Fehlermeldung eines fehlgeschlagenen Starts dann aus dem Journal, und der Log-Download im
+  Debug-Tab hängt Journal-Auszüge an Stelle des Syslogs an.
+* **Firewall:** die Voreinstellung ist `RESTRICTIVE` (die CCU liefert `MOST_OPEN` aus), die
+  Listener-Ports sind von außen also zunächst gesperrt. Die Schaltfläche auf der Listener-Karte
+  trägt sie über dieselbe `libfirewall.tcl` in die Port-Freigabe ein wie auf der CCU.
+* **Dienst:** die rc.d-Datei wird von einer generierten systemd-Unit `addon-mosquitto.service`
+  aufgerufen (`Type=oneshot`, `RemainAfterExit=yes`, `ExecStart=… start`, `ExecStop=… stop`,
+  `KillMode=control-group`). `systemctl start|stop|restart addon-mosquitto` und
+  `/usr/local/etc/config/rc.d/mosquitto start|stop|…` funktionieren beide.
+* **Eigener Benutzer (optional):** openccu-lite kann ein Addon eingeschränkt als `addon-mosquitto`
+  statt als root laufen lassen. Der Broker funktioniert dabei vollständig – die Standard-Ports
+  liegen alle über 1024, `user root` in der `mosquitto.conf` ist wirkungslos, wenn der Prozess
+  nicht als root startet, und die PID-Datei wandert automatisch von `/var/run/mosquitto.pid` nach
+  `var/mosquitto.pid` im Addon-Verzeichnis. **Nicht** funktionieren in diesem Modus die Aktionen,
+  die Root-Rechte brauchen: die Firewall-Freigabe (`/etc/config/firewall.conf` und iptables) und
+  das Selbst-Update (der Firmware-Installer). Wer beides nutzen möchte, lässt das Addon im Modus
+  „root“ laufen – das ist die Voreinstellung. Außerdem muss `/etc/config/server.pem` für den
+  Addon-Benutzer lesbar sein, sonst starten die TLS-Listener nicht; alternativ unter _Zertifikat_
+  ein eigenes erzeugen (`etc/certs/` gehört dem Addon).
+
+### Was das Addon außerhalb seines eigenen Verzeichnisses anfasst
+
+`/usr/local/addons/mosquitto/` gehört dem Addon; alles andere in dieser Liste ist für ein
+Confinement-Profil relevant:
+
+| Pfad | wann | wer |
+| --- | --- | --- |
+| `/usr/local/etc/config/rc.d/mosquitto`, `…/addons/www/mosquitto` | Installation (Symlinks) | Installer (root) |
+| `/usr/local/etc/config/hm_addons.cfg` | Installation (Konfigurations-Schaltfläche) | Installer (root) |
+| `/usr/local/etc/config/addons/mosquitto/` | Installation (leeres Verzeichnis) | Installer (root) |
+| `/var/run/mosquitto.pid` | Start als root; sonst `var/mosquitto.pid` im Addon | Dienst |
+| `/tmp/mosquitto-update/` | Selbst-Update (Status, Log, Worker-Kopie) | Update-Worker |
+| `/usr/local/tmp/new_addon.tar.gz`, `/usr/local/tmp/tmp.*` | Selbst-Update (Download, Installer) | Update-Worker |
+| Syslog bzw. Journal (`logger -t mosquitto`) | laufend | Dienst |
+| `/etc/config/firewall.conf` + iptables | nur bei _Ports freigeben_ | `firewall.cgi` (root) |
+| `/media/usb…/` | nur wenn die Persistenz dorthin gelegt wird | Broker |
+
+`/etc/config/server.pem` wird nur gelesen. Ein passender `runtime`-Block für den Addon-Katalog von
+openccu-lite ist damit:
+
+```json
+"runtime": { "root": true, "ports": [1883, 1884, 8883, 8884] }
+```
+
+`root: false` ist möglich (siehe oben: ohne Firewall-Freigabe und ohne Selbst-Update) und braucht
+keine zusätzlichen Capabilities, aber `paths` für `/etc/config/server.pem`, wenn die TLS-Listener
+das Zertifikat der Zentrale verwenden sollen.
+
+> Das Addon ist ein Broker, keine CCU-Anbindung: es liest weder Gerätenamen noch Räume, Gewerke,
+> Systemvariablen oder Programme. Auf openccu-lite gibt es Systemvariablen und Programme
+> ohnehin nicht – wer CCU-Datenpunkte auf MQTT braucht, nimmt zusätzlich
+> [hm2mqtt](https://github.com/hobbyquaker/hm2mqtt.js) oder
+> [CCU-Jack](https://github.com/mdzio/ccu-jack).
+
 ## Versionen
 
 Die Addon-Version ist `<Mosquitto-Version>+<Paketnummer>`: `2.1.2+0` ist das erste Paket mit
@@ -139,3 +217,10 @@ keeps lines it does not manage. A UI for the ACL file or the Dynamic Security pl
 scope – [she](https://github.com/hobbyquaker/she) manages Mosquitto users, roles and ACLs.
 Versions are `<mosquitto version>+<package build>`; a new package is released automatically for
 every Mosquitto release.
+
+The same package also runs on [openccu-lite](https://github.com/hobbyquaker/openccu-lite), the
+ReGa-less CCU firmware: the addon only ever asks the ReGa for the settings page's session check,
+which openccu-lite's `tclrega.so` shim answers. Logs go to the journal instead of
+`/var/log/messages`, the firewall defaults to `RESTRICTIVE`, and the rc.d script runs under a
+generated `addon-mosquitto.service`. See the [openccu-lite section](#openccu-lite) above for the
+details, including what an addon running as its own confined user can and cannot do.
