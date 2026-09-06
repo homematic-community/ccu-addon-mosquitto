@@ -63,8 +63,11 @@ once (the `mqtt` client for the tests), then:
 
 - `.github/workflows/ci.yml` — on every push/PR: syntax checks, parser test,
   three-arch build (artifacts), e2e.
-- `.github/workflows/build.yml` — manual release build: builds, tests and
-  creates a **draft prerelease** tagged with the version from package.json.
+- `.github/workflows/build.yml` — release build. A pushed tag equal to the
+  version in package.json (`git tag 2.1.2+2 && git push origin 2.1.2+2`)
+  builds, tests and **publishes** the release for that tag; running it by hand
+  creates a **draft prerelease** instead. A tag that does not match
+  package.json fails the run before anything is built.
 - `.github/workflows/auto-release.yml` — daily: `node update_versions.js`
   checks for a newer Mosquitto release; if there is one, the version becomes
   `<new>+0`, the packages are built and tested, the bump is committed and

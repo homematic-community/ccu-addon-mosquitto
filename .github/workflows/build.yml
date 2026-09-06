@@ -1,11 +1,22 @@
 name: build-release
 
-# Manual release build: builds all three architectures from the version in
-# package.json, runs the end-to-end test and creates a draft prerelease
-# tagged with the version (no "v" prefix, like the old 1.5.8+x releases).
-# The maintainer reviews and publishes it.
+# Release build. Two ways in:
+#
+#   * push a tag named exactly like the version in package.json (no "v"
+#     prefix, like the old 1.5.8+x releases):
+#     `git tag 2.1.2+2 && git push origin 2.1.2+2`
+#     - builds all three architectures, runs the tests and publishes the
+#     release for that tag;
+#   * run it by hand (workflow_dispatch) - same build, but the release is
+#     created as a draft prerelease for the maintainer to review.
+#
+# The daily automatic release for new Mosquitto versions is auto-release.yml.
 
 on:
+  push:
+    tags:
+      # glob, not a regex: <digits>.<digits>.<digits>+<build>
+      - '[0-9]*.[0-9]*.[0-9]*'
   workflow_dispatch:
 
 jobs:
@@ -32,7 +43,15 @@ jobs:
 
       - name: Read addon version
         id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # a tag release must carry the version the packages are built with,
+          # or the release and its assets would disagree
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match the package.json version $version"
+            exit 1
+          fi
 
       - name: Build addon packages
         run: ./build.sh
@@ -47,8 +66,11 @@ jobs:
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          draft: true
-          prerelease: true
+          # a pushed tag is the maintainer's release; a manual run stays a draft
+          draft: ${{ github.ref_type != 'tag' }}
+          prerelease: ${{ github.ref_type != 'tag' }}
+          makeLatest: ${{ github.ref_type == 'tag' }}
+          allowUpdates: true
           artifacts: dist/*
           bodyFile: RELEASE_BODY.md
           tag: "${{ steps.version.outputs.version }}"
