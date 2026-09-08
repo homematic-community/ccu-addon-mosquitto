@@ -194,8 +194,8 @@ täglich auf neue Mosquitto-Releases, baut die Pakete, testet sie und veröffent
 ## Entwicklung
 
 [BUILD.md](BUILD.md) beschreibt den Build (Mosquitto wird in Alpine-Containern aus dem Quelltext
-gebaut, die Binaries werden per `patchelf` in den Addon-Pfad verankert) und die Tests,
-[ROADMAP.md](ROADMAP.md) die Planung.
+gebaut, die Binaries werden per `patchelf` in den Addon-Pfad verankert) und die Tests; die
+Planung wird außerhalb dieses Repositories gepflegt.
 
 ## Lizenzen
 
