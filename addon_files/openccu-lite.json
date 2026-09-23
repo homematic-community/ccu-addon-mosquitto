@@ -1,0 +1,35 @@
+{
+  "format": 1,
+  "id": "mosquitto",
+  "name": "Mosquitto",
+  "description": {
+    "de": "Der MQTT-Broker — die Brücke zu Home Assistant, ioBroker und allem anderen.",
+    "en": "The MQTT broker — the bridge to Home Assistant, ioBroker and everything else."
+  },
+  "homepage": "https://github.com/homematic-community/ccu-addon-mosquitto",
+  "licence": "EPL-2.0",
+  "release": {
+    "github": "homematic-community/ccu-addon-mosquitto",
+    "asset": "mosquitto-{arch}-{version}.tar.gz",
+    "fallback_asset": "mosquitto-{version}.tar.gz"
+  },
+  "requires": {
+    "architectures": ["armv7l", "aarch64", "x86_64"]
+  },
+  "ui": {
+    "logo": "mosquitto/www/mosquitto-text-side-28.png",
+    "own_updater": true
+  },
+  "runtime": {
+    "needs": [],
+    "ports": [1883, 8883],
+    "port_info": {
+      "1883": {"proto": "tcp", "label": {"de": "MQTT, unverschlüsselt", "en": "MQTT, plain"}},
+      "8883": {"proto": "tcp", "tls": true, "label": {"de": "MQTT über TLS", "en": "MQTT over TLS"}}
+    },
+    "note": {
+      "de": "Beide Ports sind in der Firewall geschlossen, bis sie auf der Netzwerk-Seite geöffnet werden; der TLS-Port nutzt das Zertifikat des Systems (certs-Gruppe).",
+      "en": "Both ports stay closed in the firewall until opened on the Network page; the TLS port uses the system's certificate (certs group)."
+    }
+  }
+}
