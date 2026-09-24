@@ -21,6 +21,7 @@
     "own_updater": true
   },
   "runtime": {
+    "daemon": true,
     "needs": [],
     "ports": [1883, 8883],
     "port_info": {

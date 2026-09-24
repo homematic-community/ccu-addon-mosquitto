@@ -33,6 +33,8 @@ test('the runtime block declares the broker ports and nothing it does not need',
     assert.deepEqual(manifest.runtime.ports, [1883, 8883]);
     assert.deepEqual(Object.keys(manifest.runtime.port_info).sort(), ['1883', '8883']);
     assert.deepEqual(manifest.runtime.needs, []);
+    // the broker keeps running after the rc.d start: an empty unit is a broker that ended
+    assert.equal(manifest.runtime.daemon, true);
     assert.equal(manifest.runtime.root, undefined);
     // the logo the manifest names is part of the package
     assert.ok(fs.existsSync(path.join(root, manifest.ui.logo)), manifest.ui.logo);
