@@ -128,6 +128,11 @@ Firewall-Freigabe und das Update per Klick brauchen die ReGa nicht und verhalten
 
 Unterschiede, die man kennen sollte:
 
+* **Installation:** aus dem Addon-Katalog des Systems (_Zusatzsoftware → Katalog_), dasselbe Paket
+  wie auf der CCU; seine Beschreibung für openccu-lite (`openccu-lite.json`) liegt im Paket.
+* **Start:** der Broker braucht keinen Schnittstellenprozess (`"needs": []`) und startet deshalb
+  gleich nach dem Netzwerk, vor `rfd` und `hmipserver`. Clients wie hm2mqtt oder RedMatic finden
+  ihn beim eigenen Start schon vor.
 * **Log:** openccu-lite protokolliert in den systemd-Journal, ein `/var/log/messages` gibt es nicht.
   `log_dest syslog` bleibt richtig – die Zeilen landen über `/dev/log` im Journal und sind mit
   `journalctl -t mosquitto` bzw. `journalctl -u addon-mosquitto` zu sehen. Die Prozesskarte holt die
@@ -220,7 +225,9 @@ every Mosquitto release.
 
 The same package also runs on [openccu-lite](https://github.com/hobbyquaker/openccu-lite), the
 ReGa-less CCU firmware: the addon only ever asks the ReGa for the settings page's session check,
-which openccu-lite's `tclrega.so` shim answers. Logs go to the journal instead of
+which openccu-lite's `tclrega.so` shim answers. There it is installed from the system's addon catalogue
+(_Addons → Catalogue_), and since the broker needs no interface process it starts right after the
+network, before `rfd` and `hmipserver`. Logs go to the journal instead of
 `/var/log/messages`, the firewall defaults to `RESTRICTIVE`, and the rc.d script runs under a
 generated `addon-mosquitto.service`. See the [openccu-lite section](#openccu-lite) above for the
 details, including what an addon running as its own confined user can and cannot do.
