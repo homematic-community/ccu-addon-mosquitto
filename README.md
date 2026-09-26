@@ -141,9 +141,9 @@ Unterschiede, die man kennen sollte:
   Debug-Tab hängt Journal-Auszüge an Stelle des Syslogs an.
 * **Firewall:** openccu-lite hat keine `libfirewall.tcl`, sondern eine eigene Firewall; auf einem
   neuen System sind nur die Weboberfläche und, wenn eingeschaltet, SSH aus lokalen Netzen
-  erreichbar. Die Ports aus dem Manifest, 1883 und 8883, sind Schalter auf der Seite _Zusatzsoftware_ des Systems (_Ports der
-  Zusatzsoftware_) und geschlossen, bis man sie dort öffnet. Weitere Listener, etwa die WebSockets
-  auf 1884 und 8884, brauchen eine eigene Regel unter _System → Firewall_. Die Konfigurationsseite
+  erreichbar. Alle vier Ports aus dem Manifest – 1883 und 8883 für MQTT, 1884 und 8884 für die
+  WebSockets – sind Schalter auf der Seite _Zusatzsoftware_ des Systems (_Ports der
+  Zusatzsoftware_) und geschlossen, bis man sie dort öffnet. Die Konfigurationsseite
   des Addons zeigt auf openccu-lite keinen Firewall-Status und keine Schaltfläche zur Freigabe.
 * **Dienst:** die rc.d-Datei wird von einer generierten systemd-Unit `addon-mosquitto.service`
   aufgerufen (`Type=oneshot`, `RemainAfterExit=yes`, `ExecStart=… start`, `ExecStop=… stop`,
@@ -183,7 +183,7 @@ dort erlaubt, steht im Manifest `openccu-lite.json` im Paket; openccu-lite wende
 Installation und jedem Update an:
 
 ```json
-"runtime": { "daemon": true, "needs": [], "ports": [1883, 8883], … }
+"runtime": { "daemon": true, "needs": [], "ports": [1883, 8883, 1884, 8884], … }
 ```
 
 Kein `root`, keine zusätzlichen Capabilities und keine `paths`: das Zertifikat des Systems liest
@@ -235,9 +235,8 @@ which openccu-lite's `tclrega.so` shim answers. There it is installed from the s
 network, before `rfd` and `hmipserver`. Logs go to the journal instead of
 `/var/log/messages`, and the rc.d script runs under a generated `addon-mosquitto.service`, as the
 confined user `addon-mosquitto`: the package's manifest (`openccu-lite.json`) asks for no root.
-The firewall is the system's own, not `libfirewall.tcl`: the ports the manifest declares, 1883 and
-8883, are switches on the system's Addons page (_Addon ports_), closed until opened there; other
-listeners such as the WebSockets on 1884 and 8884 need a rule of their own under _System →
-Firewall_. The settings page shows no firewall status or button there, and updates come from the
-system's Addons page. See the [openccu-lite section](#openccu-lite) above for the
+The firewall is the system's own, not `libfirewall.tcl`: all four ports the manifest declares, 1883
+and 8883 for MQTT, 1884 and 8884 for the WebSockets, are switches on the system's Addons page
+(_Addon ports_), closed until opened there. The settings page shows no firewall status or button
+there, and updates come from the system's Addons page. See the [openccu-lite section](#openccu-lite) above for the
 details, including what an addon running as its own confined user can and cannot do.

@@ -23,14 +23,16 @@
   "runtime": {
     "daemon": true,
     "needs": [],
-    "ports": [1883, 8883],
+    "ports": [1883, 8883, 1884, 8884],
     "port_info": {
       "1883": {"proto": "tcp", "label": {"de": "MQTT, unverschlüsselt", "en": "MQTT, plain"}},
-      "8883": {"proto": "tcp", "tls": true, "label": {"de": "MQTT über TLS", "en": "MQTT over TLS"}}
+      "8883": {"proto": "tcp", "tls": true, "label": {"de": "MQTT über TLS", "en": "MQTT over TLS"}},
+      "1884": {"proto": "tcp", "label": {"de": "MQTT über WebSockets, unverschlüsselt", "en": "MQTT over WebSockets, plain"}},
+      "8884": {"proto": "tcp", "tls": true, "label": {"de": "MQTT über WebSockets mit TLS", "en": "MQTT over WebSockets with TLS"}}
     },
     "note": {
-      "de": "Beide Ports sind in der Firewall geschlossen, bis sie auf der Netzwerk-Seite geöffnet werden; der TLS-Port nutzt das Zertifikat des Systems (certs-Gruppe).",
-      "en": "Both ports stay closed in the firewall until opened on the Network page; the TLS port uses the system's certificate (certs group)."
+      "de": "Alle vier Ports sind in der Firewall geschlossen, bis sie auf der Seite Zusatzsoftware (Ports der Zusatzsoftware) geöffnet werden; die TLS-Ports nutzen das Zertifikat des Systems (certs-Gruppe).",
+      "en": "All four ports stay closed in the firewall until opened on the Addons page (Addon ports); the TLS ports use the system's certificate (certs group)."
     }
   }
 }

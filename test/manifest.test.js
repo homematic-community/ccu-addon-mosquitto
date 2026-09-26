@@ -30,8 +30,12 @@ test('the release source is this repository and its asset names', () => {
 });
 
 test('the runtime block declares the broker ports and nothing it does not need', () => {
-    assert.deepEqual(manifest.runtime.ports, [1883, 8883]);
-    assert.deepEqual(Object.keys(manifest.runtime.port_info).sort(), ['1883', '8883']);
+    // the four listeners of mosquitto.conf.default: MQTT and WebSockets, each plain and over TLS
+    assert.deepEqual(manifest.runtime.ports, [1883, 8883, 1884, 8884]);
+    assert.deepEqual(Object.keys(manifest.runtime.port_info).sort(), ['1883', '1884', '8883', '8884']);
+    const conf = fs.readFileSync(path.join(root, 'mosquitto', 'etc', 'mosquitto.conf.default'), 'utf8');
+    const listeners = [...conf.matchAll(/^listener (\d+)/gm)].map((m) => Number(m[1])).sort();
+    assert.deepEqual([...manifest.runtime.ports].sort(), listeners);
     assert.deepEqual(manifest.runtime.needs, []);
     // the broker keeps running after the rc.d start: an empty unit is a broker that ended
     assert.equal(manifest.runtime.daemon, true);
