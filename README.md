@@ -123,8 +123,9 @@ eigene Variante, keine zusätzliche Konfiguration.
 Das Addon spricht mit der ReGa an genau einer Stelle: der Sitzungsprüfung der Konfigurationsseite
 (`rega_script "Write(system.GetSessionVarStr('…'))"` in `lib/session.tcl`). Genau diesen Aufruf
 beantwortet openccu-lite mit seinem `tclrega.so`-Shim, deshalb funktionieren Anmeldung und alle
-CGIs wie gewohnt. Broker, Listener, TLS, Authentifizierung, Bridges, Persistenz, Prozesssteuerung,
-Firewall-Freigabe und das Update per Klick brauchen die ReGa nicht und verhalten sich identisch.
+CGIs wie gewohnt. Broker, Listener, TLS, Authentifizierung, Bridges, Persistenz und
+Prozesssteuerung brauchen die ReGa nicht und verhalten sich identisch; Firewall und Updates
+übernimmt dort das System (siehe unten).
 
 Unterschiede, die man kennen sollte:
 
@@ -138,23 +139,26 @@ Unterschiede, die man kennen sollte:
   `journalctl -t mosquitto` bzw. `journalctl -u addon-mosquitto` zu sehen. Die Prozesskarte holt die
   letzte Fehlermeldung eines fehlgeschlagenen Starts dann aus dem Journal, und der Log-Download im
   Debug-Tab hängt Journal-Auszüge an Stelle des Syslogs an.
-* **Firewall:** die Voreinstellung ist `RESTRICTIVE` (die CCU liefert `MOST_OPEN` aus), die
-  Listener-Ports sind von außen also zunächst gesperrt. Die Schaltfläche auf der Listener-Karte
-  trägt sie über dieselbe `libfirewall.tcl` in die Port-Freigabe ein wie auf der CCU.
+* **Firewall:** openccu-lite hat keine `libfirewall.tcl`, sondern eine eigene Firewall; auf einem
+  neuen System sind nur die Weboberfläche und, wenn eingeschaltet, SSH aus lokalen Netzen
+  erreichbar. Die Ports aus dem Manifest, 1883 und 8883, sind Schalter auf der Seite _Zusatzsoftware_ des Systems (_Ports der
+  Zusatzsoftware_) und geschlossen, bis man sie dort öffnet. Weitere Listener, etwa die WebSockets
+  auf 1884 und 8884, brauchen eine eigene Regel unter _System → Firewall_. Die Konfigurationsseite
+  des Addons zeigt auf openccu-lite keinen Firewall-Status und keine Schaltfläche zur Freigabe.
 * **Dienst:** die rc.d-Datei wird von einer generierten systemd-Unit `addon-mosquitto.service`
   aufgerufen (`Type=oneshot`, `RemainAfterExit=yes`, `ExecStart=… start`, `ExecStop=… stop`,
   `KillMode=control-group`). `systemctl start|stop|restart addon-mosquitto` und
   `/usr/local/etc/config/rc.d/mosquitto start|stop|…` funktionieren beide.
-* **Eigener Benutzer (optional):** openccu-lite kann ein Addon eingeschränkt als `addon-mosquitto`
-  statt als root laufen lassen. Der Broker funktioniert dabei vollständig – die Standard-Ports
-  liegen alle über 1024, `user root` in der `mosquitto.conf` ist wirkungslos, wenn der Prozess
-  nicht als root startet, und die PID-Datei wandert automatisch von `/var/run/mosquitto.pid` nach
-  `var/mosquitto.pid` im Addon-Verzeichnis. **Nicht** funktionieren in diesem Modus die Aktionen,
-  die Root-Rechte brauchen: die Firewall-Freigabe (`/etc/config/firewall.conf` und iptables) und
-  das Selbst-Update (der Firmware-Installer). Wer beides nutzen möchte, lässt das Addon im Modus
-  „root“ laufen – das ist die Voreinstellung. Außerdem muss `/etc/config/server.pem` für den
-  Addon-Benutzer lesbar sein, sonst starten die TLS-Listener nicht; alternativ unter _Zertifikat_
-  ein eigenes erzeugen (`etc/certs/` gehört dem Addon).
+* **Eigener Benutzer:** das Manifest verlangt kein root, openccu-lite lässt das Addon deshalb
+  eingeschränkt als `addon-mosquitto` laufen. Der Broker funktioniert dabei vollständig – die
+  Standard-Ports liegen alle über 1024, `user root` in der `mosquitto.conf` ist wirkungslos, wenn
+  der Prozess nicht als root startet, und die PID-Datei wandert automatisch von
+  `/var/run/mosquitto.pid` nach `var/mosquitto.pid` im Addon-Verzeichnis. Das Zertifikat des
+  Systems (`/etc/config/server.pem`) liest das Addon über die Gruppe `certs`; alternativ unter
+  _Zertifikat_ ein eigenes erzeugen (`etc/certs/` gehört dem Addon). **Nicht** funktioniert in
+  diesem Modus das Selbst-Update (der Firmware-Installer braucht root); Updates kommen über die
+  Seite _Zusatzsoftware_ des Systems. Auf der Seite _Dienste_ lässt sich das Addon auf root
+  umstellen, dort als „root (unsicher)“ gekennzeichnet.
 
 ### Was das Addon außerhalb seines eigenen Verzeichnisses anfasst
 
@@ -173,16 +177,17 @@ Confinement-Profil relevant:
 | `/etc/config/firewall.conf` + iptables | nur bei _Ports freigeben_ | `firewall.cgi` (root) |
 | `/media/usb…/` | nur wenn die Persistenz dorthin gelegt wird | Broker |
 
-`/etc/config/server.pem` wird nur gelesen. Ein passender `runtime`-Block für den Addon-Katalog von
-openccu-lite ist damit:
+`/etc/config/server.pem` wird nur gelesen. Auf openccu-lite entfällt die Firewall-Zeile (es gibt
+keine `libfirewall.tcl`), im eingeschränkten Modus auch das Selbst-Update. Was das System dem Addon
+dort erlaubt, steht im Manifest `openccu-lite.json` im Paket; openccu-lite wendet es bei jeder
+Installation und jedem Update an:
 
 ```json
-"runtime": { "root": true, "ports": [1883, 1884, 8883, 8884] }
+"runtime": { "daemon": true, "needs": [], "ports": [1883, 8883], … }
 ```
 
-`root: false` ist möglich (siehe oben: ohne Firewall-Freigabe und ohne Selbst-Update) und braucht
-keine zusätzlichen Capabilities, aber `paths` für `/etc/config/server.pem`, wenn die TLS-Listener
-das Zertifikat der Zentrale verwenden sollen.
+Kein `root`, keine zusätzlichen Capabilities und keine `paths`: das Zertifikat des Systems liest
+jedes eingeschränkte Addon über die Gruppe `certs`.
 
 > Das Addon ist ein Broker, keine CCU-Anbindung: es liest weder Gerätenamen noch Räume, Gewerke,
 > Systemvariablen oder Programme. Auf openccu-lite gibt es Systemvariablen und Programme
@@ -228,6 +233,11 @@ ReGa-less CCU firmware: the addon only ever asks the ReGa for the settings page'
 which openccu-lite's `tclrega.so` shim answers. There it is installed from the system's addon catalogue
 (_Addons → Catalogue_), and since the broker needs no interface process it starts right after the
 network, before `rfd` and `hmipserver`. Logs go to the journal instead of
-`/var/log/messages`, the firewall defaults to `RESTRICTIVE`, and the rc.d script runs under a
-generated `addon-mosquitto.service`. See the [openccu-lite section](#openccu-lite) above for the
+`/var/log/messages`, and the rc.d script runs under a generated `addon-mosquitto.service`, as the
+confined user `addon-mosquitto`: the package's manifest (`openccu-lite.json`) asks for no root.
+The firewall is the system's own, not `libfirewall.tcl`: the ports the manifest declares, 1883 and
+8883, are switches on the system's Addons page (_Addon ports_), closed until opened there; other
+listeners such as the WebSockets on 1884 and 8884 need a rule of their own under _System →
+Firewall_. The settings page shows no firewall status or button there, and updates come from the
+system's Addons page. See the [openccu-lite section](#openccu-lite) above for the
 details, including what an addon running as its own confined user can and cannot do.
