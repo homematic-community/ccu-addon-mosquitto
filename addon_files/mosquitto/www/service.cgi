@@ -54,7 +54,7 @@ puts -nonewline "Content-Type: text/plain; charset=utf-8\r\n\r\n"
 
 if {$cmd == "stop" || $cmd == "start" || $cmd == "restart" || $cmd == "reload"} {
     source ../lib/session.tcl
-    if {[info exists sid] && [check_session $sid]} {
+    if {[request_session_ok]} {
         catch {run $RC $cmd} result
         regsub -all {\n?child process exited abnormally$} $result "" result
         puts $result

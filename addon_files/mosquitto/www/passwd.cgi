@@ -49,7 +49,7 @@ proc user_list_json {} {
     return "\[[join $items ,]\]"
 }
 
-if {![info exists sid] || ![check_session $sid]} {
+if {![request_session_ok]} {
     fail "invalid session"
 }
 if {![info exists cmd]} {

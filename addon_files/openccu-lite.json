@@ -18,7 +18,8 @@
   },
   "ui": {
     "logo": "mosquitto/www/mosquitto-text-side-28.png",
-    "own_updater": true
+    "own_updater": true,
+    "session_header": true
   },
   "runtime": {
     "daemon": true,

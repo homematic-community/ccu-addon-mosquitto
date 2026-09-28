@@ -21,7 +21,7 @@ set CERT_DIR $ADDON_DIR/etc/certs
 
 puts -nonewline "Content-Type: text/plain; charset=utf-8\r\n\r\n"
 
-if {![info exists sid] || ![check_session $sid]} {
+if {![request_session_ok]} {
     puts {error: invalid session}
     exit 0
 }

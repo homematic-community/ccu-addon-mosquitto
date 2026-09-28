@@ -43,3 +43,7 @@ test('the runtime block declares the broker ports and nothing it does not need',
     // the logo the manifest names is part of the package
     assert.ok(fs.existsSync(path.join(root, manifest.ui.logo)), manifest.ui.logo);
 });
+
+test('the settings page reads the session header, so the system opens it without ?sid= (task 21)', () => {
+    assert.equal(manifest.ui.session_header, true);
+});

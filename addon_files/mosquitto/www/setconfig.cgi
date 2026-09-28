@@ -14,7 +14,7 @@ set CONFIG $ADDON_DIR/etc/mosquitto.conf
 
 puts -nonewline "Content-Type: text/plain; charset=utf-8\r\n\r\n"
 
-if {![info exists sid] || ![check_session $sid]} {
+if {![request_session_ok]} {
     puts {error: invalid session}
     exit 0
 }

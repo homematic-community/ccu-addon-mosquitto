@@ -671,6 +671,81 @@ test('B hand-written options are shown and kept, a second bridge, a missing cust
     assert.deepEqual(page.problems.filter(p => !/getconfig|update\.cgi/.test(p)), []);
 });
 
+// =========================== D: openccu-lite's session header (task 21) ===========================
+
+const LIVE = 'LIVESESSIONLIVESESSIONLI22';
+const lite = on => shOk(on ? "printf 'VERSION=3.89.11\\nPRODUCT=ova\\nVARIANT=lite\\nLITE=1.0.0-dev.30\\n' > /VERSION" : 'rm -f /VERSION');
+const withHeader = (pathAndQuery, id, body) => fetch(`${U.http}/addons/mosquitto/${pathAndQuery}`, {
+    method: body === undefined ? 'GET' : 'POST', body,
+    headers: { 'X-Occulite-Session': id, ...(body === undefined ? {} : { 'Content-Type': 'application/x-www-form-urlencoded' }) }
+}).then(async r => ({ status: r.status, text: await r.text() }));
+const stateAsked = () => sh('cat /tmp/occulite-state.log 2>/dev/null').out.trim();
+
+test('D the session header: the page and the CGIs without ?sid= on openccu-lite, never on a CCU', async () => {
+    put(box, '/tmp/occulite-live-sid', LIVE);
+    lite(true);
+    shOk(': > /tmp/occulite-state.log');
+    let r = await withHeader('settings.cgi', LIVE);
+    assert.match(r.text, /id="listeners"/, 'the page with the header alone');
+    assert.equal(stateAsked(), `GET /api/auth/v1/state Bearer ${LIVE}`, 'the system was asked once, the id as Bearer');
+    assert.match((await withHeader('getconfig.cgi', LIVE)).text, /^listener 1883$/m);
+    assert.match((await withHeader('passwd.cgi?cmd=list', LIVE)).text, /"users"/);
+    assert.match((await withHeader('service.cgi?cmd=reload', LIVE)).text, /OK/);
+    assert.doesNotMatch((await withHeader('update.cgi?cmd=log', LIVE)).text, /invalid session/);
+    assert.doesNotMatch((await withHeader('log.cgi', LIVE)).text, /invalid session/);
+    // what the system does not confirm is refused, and a header that is there decides
+    for (const [id, what] of [['UNKNOWNUNKNOWNUNKNOWNUNK22', 'an unknown session'], ['TOKENONLYTOKENONLY', 'an API token (no sid)']]) {
+        shOk(': > /tmp/occulite-state.log');
+        assert.match((await withHeader('getconfig.cgi', id)).text, /error: invalid session/, what);
+        assert.equal(stateAsked(), `GET /api/auth/v1/state Bearer ${id}`, `${what}: asked once`);
+        assert.match((await withHeader(`settings.cgi?sid=${SID}`, id)).text, /Sitzung ungültig/, `${what}: a valid ?sid= next to it does not lift it`);
+    }
+    for (const id of [`@${LIVE}@`, `${LIVE},${LIVE}`, `${LIVE}:x`]) {
+        shOk(': > /tmp/occulite-state.log');
+        assert.match((await withHeader('getconfig.cgi', id)).text, /error: invalid session/, id);
+        assert.equal(stateAsked(), '', `${id}: refused without asking`);
+    }
+    // without a header ?sid= goes through the tclrega shim as before
+    assert.match((await c(`getconfig.cgi?sid=${SID}`)).text, /^listener 1883$/m);
+    // occulited alone counts as openccu-lite
+    lite(false);
+    shOk('touch /usr/bin/occulited');
+    assert.match((await withHeader('getconfig.cgi', LIVE)).text, /^listener 1883$/m, 'occulited without a LITE= line');
+    shOk('rm -f /usr/bin/occulited');
+    // a CCU passes a client's header through: it is never read there, and nobody is asked
+    shOk(': > /tmp/occulite-state.log');
+    assert.match((await withHeader('settings.cgi', LIVE)).text, /Sitzung ungültig/);
+    assert.match((await withHeader('getconfig.cgi', LIVE)).text, /error: invalid session/);
+    assert.equal(stateAsked(), '');
+    assert.match((await withHeader(`getconfig.cgi?sid=${SID}`, 'UNKNOWNUNKNOWNUNKNOWNUNK22')).text, /^listener 1883$/m, '?sid= works there whatever the header says');
+});
+
+test('D the page opened without ?sid= on openccu-lite: every call rides on the header, none carries sid=', async () => {
+    lite(true);
+    const ctx = await browser.newContext({ extraHTTPHeaders: { 'X-Occulite-Session': LIVE } });
+    const requests = [];
+    ctx.on('request', r => requests.push(r.url()));
+    const litePage = await P.openSettings(ctx, `${U.http}/addons/mosquitto/settings.cgi`);
+    try {
+        assert.match(await P.text(litePage, '#status'), /running/);
+        assert.equal(await P.count(litePage, '#listeners .listener'), 4);
+        await P.checkSaved(litePage, '#persistence', false);
+        assert.match(await conf(), /^persistence false$/m, 'a change saved through the header');
+        await P.checkSaved(litePage, '#persistence', true);
+        const [download] = await Promise.all([litePage.waitForEvent('download'), P.click(litePage, '#log-download')]);
+        assert.equal(download.url(), `${U.http}/addons/mosquitto/log.cgi`, 'the log download without sid=');
+        // (playwright's download does not carry the context's extra headers, the system's gate
+        // adds the header from the cookie there; test D above reads log.cgi with the header)
+        assert.ok(requests.some(u => /getconfig\.cgi/.test(u)) && requests.some(u => /setconfig\.cgi/.test(u)));
+        assert.deepEqual(requests.filter(u => /[?&]sid=/.test(u)), [], 'no request carries sid=');
+        assert.deepEqual(litePage.problems, []);
+        coverageEntries.push(await litePage.coverage.stopJSCoverage());
+    } finally {
+        await ctx.close();
+        lite(false);
+    }
+});
+
 // =========================== C: coverage of the page script ===========================
 
 test('C coverage of www/js/script.js in the browser', async () => {

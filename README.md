@@ -123,7 +123,11 @@ eigene Variante, keine zusätzliche Konfiguration.
 Das Addon spricht mit der ReGa an genau einer Stelle: der Sitzungsprüfung der Konfigurationsseite
 (`rega_script "Write(system.GetSessionVarStr('…'))"` in `lib/session.tcl`). Genau diesen Aufruf
 beantwortet openccu-lite mit seinem `tclrega.so`-Shim, deshalb funktionieren Anmeldung und alle
-CGIs wie gewohnt. Broker, Listener, TLS, Authentifizierung, Bridges, Persistenz und
+CGIs wie gewohnt. Besser noch: auf openccu-lite nehmen die Konfigurationsseite und alle CGIs die
+Sitzung aus dem Header `X-Occulite-Session`, den das System jeder Anfrage unter `/addons/` mitgibt,
+und lassen sie sich vom System bestätigen (`/api/auth/v1/state`); das Manifest meldet das
+(`ui.session_header`), und das System öffnet die Seite ohne `?sid=`. Auf CCU3 und OpenCCU wird der
+Header nie gelesen. Broker, Listener, TLS, Authentifizierung, Bridges, Persistenz und
 Prozesssteuerung brauchen die ReGa nicht und verhalten sich identisch; Firewall und Updates
 übernimmt dort das System (siehe unten).
 
@@ -230,7 +234,9 @@ every Mosquitto release.
 
 The same package also runs on [openccu-lite](https://github.com/hobbyquaker/openccu-lite), the
 ReGa-less CCU firmware: the addon only ever asks the ReGa for the settings page's session check,
-which openccu-lite's `tclrega.so` shim answers. There it is installed from the system's addon catalogue
+which openccu-lite's `tclrega.so` shim answers; there the page and its CGIs take the session from the
+system's `X-Occulite-Session` header instead, confirmed with the system, so the system opens the page
+without `?sid=` (the manifest declares `ui.session_header`). There it is installed from the system's addon catalogue
 (_Addons → Catalogue_), and since the broker needs no interface process it starts right after the
 network, before `rfd` and `hmipserver`. Logs go to the journal instead of
 `/var/log/messages`, and the rc.d script runs under a generated `addon-mosquitto.service`, as the

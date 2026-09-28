@@ -57,7 +57,7 @@ if {$cmd == "status"} {
 
 source ../lib/session.tcl
 
-if {![info exists sid] || ![check_session $sid]} {
+if {![request_session_ok]} {
     puts -nonewline "Content-Type: application/json; charset=utf-8\r\n\r\n"
     puts {{"error":"invalid session"}}
     exit 0

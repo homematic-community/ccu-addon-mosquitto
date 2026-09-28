@@ -29,6 +29,7 @@ function setupWebUI(box) {
     put(box, '/etc/lighttpd/ccu.conf', stub('lighttpd-ccu.conf'));
     put(box, '/tmp/tclrega.c', stub('tclrega-stub.c'));
     put(box, '/lib/libfirewall.tcl', stub('libfirewall-stub.tcl'));
+    put(box, '/www/api/auth/v1/state', stub('occulite-state-stub.tcl'));
     put(box, '/usr/local/bin/curl', FAKE_CURL, '755');
     box.shOk('gcc -shared -fPIC $(pkg-config --cflags tcl) -o /usr/lib/tclrega.so /tmp/tclrega.c');
     box.shOk(`mkdir -p /www && ln -sfn /usr/local/etc/config/addons/www /www/addons && echo ${SID_ID} > /tmp/valid-sid`);

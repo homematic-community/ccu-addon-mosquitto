@@ -360,6 +360,10 @@
 
     const sidMatch = location.search.match(/sid=(@[0-9a-zA-Z]{10}@)/);
     const sid = sidMatch ? sidMatch[1] : '';
+    // the session id rides along only where the page got one: on openccu-lite the system opens
+    // the page without ?sid= and its gate sends the session as a header with every same-origin
+    // request (the manifest declares ui.session_header), so no empty sid= is appended
+    const withSid = url => sid ? url + (url.includes('?') ? '&' : '?') + 'sid=' + sid : url;
 
     function invalidSession() {
         $('#invalidSession').style.display = 'block';
@@ -454,7 +458,7 @@
     // --- load / save ----------------------------------------------------------------
 
     async function loadConfig() {
-        const text = await get('getconfig.cgi?sid=' + sid);
+        const text = await get(withSid('getconfig.cgi'));
         load(text);
         render();
     }
@@ -462,7 +466,7 @@
     async function save() {
         const text = serialise();
         try {
-            const result = (await post('setconfig.cgi?sid=' + sid, text)).trim();
+            const result = (await post(withSid('setconfig.cgi'), text)).trim();
             if (result === 'ok') {
                 window.saveCount = (window.saveCount || 0) + 1;   // tests wait on this
                 $('#apply-bar').classList.remove('hidden');
@@ -615,7 +619,7 @@
 
     async function loadFirewall() {
         try {
-            firewall = await getJson('firewall.cgi?cmd=status&sid=' + sid);
+            firewall = await getJson(withSid('firewall.cgi?cmd=status'));
         } catch (e) {
             firewall = null;
         }
@@ -627,7 +631,7 @@
         if (!ports.length) return;
         $('#firewall-spinner').classList.remove('hidden');
         try {
-            const data = await getJsonPost('firewall.cgi?cmd=open&sid=' + sid, form({ ports: ports.join(',') }));
+            const data = await getJsonPost(withSid('firewall.cgi?cmd=open'), form({ ports: ports.join(',') }));
             if (data.error) toast(data.error, 'danger', 6000);
             else { firewall = data; toast('Ports ' + ports.join(', ') + ' in der CCU-Firewall freigegeben'); }
         } catch (e) {
@@ -726,7 +730,7 @@
         const cert = currentCert();
         const info = $('#cert-info');
         if (!cert.certfile) { info.classList.add('hidden'); return; }
-        get(`cert.cgi?cmd=info&sid=${sid}&file=${encodeURIComponent(cert.certfile)}`).then(text => {
+        get(withSid(`cert.cgi?cmd=info&file=${encodeURIComponent(cert.certfile)}`)).then(text => {
             info.textContent = cert.certfile + '\n' + text.trim();
             info.classList.remove('hidden');
         }).catch(() => info.classList.add('hidden'));
@@ -757,7 +761,7 @@
         if (!confirm('Ein neues selbstsigniertes Zertifikat erzeugen? Ein vorhandenes in etc/certs/ wird ersetzt.')) return;
         $('#cert-spinner').classList.remove('hidden');
         try {
-            const result = (await post('cert.cgi?cmd=generate&sid=' + sid, form({ cn: '' }))).trim();
+            const result = (await post(withSid('cert.cgi?cmd=generate'), form({ cn: '' }))).trim();
             if (result === 'ok') {
                 toast('Zertifikat erzeugt');
                 renderCert();
@@ -825,7 +829,7 @@
                     el('button', { type: 'button', class: 'btn btn-danger', text: 'Löschen', onclick: async () => {
                         if (!confirm(`Benutzer ${name} löschen?`)) return;
                         try {
-                            const data = await getJsonPost('passwd.cgi?cmd=delete&sid=' + sid, form({ user: name }));
+                            const data = await getJsonPost(withSid('passwd.cgi?cmd=delete'), form({ user: name }));
                             if (data.error) toast(data.error, 'danger', 6000);
                             else { toast(`Benutzer ${name} gelöscht`); renderUsers(data.users); }
                         } catch (e) {
@@ -839,7 +843,7 @@
 
     async function loadUsers() {
         try {
-            const data = await getJson('passwd.cgi?cmd=list&sid=' + sid);
+            const data = await getJson(withSid('passwd.cgi?cmd=list'));
             renderUsers(data.users || []);
         } catch (e) { /* session error already shown */ }
     }
@@ -855,7 +859,7 @@
         $('#user-pass2').classList.toggle('is-invalid', !pwOk);
         if (!nameOk || !pwOk) return;
         try {
-            const data = await getJsonPost('passwd.cgi?cmd=set&sid=' + sid, form({ user: name, password: pw1 }));
+            const data = await getJsonPost(withSid('passwd.cgi?cmd=set'), form({ user: name, password: pw1 }));
             if (data.error) { toast(data.error, 'danger', 6000); return; }
             toast(`Passwort für ${name} gesetzt`);
             $('#user-name').value = '';
@@ -923,7 +927,7 @@
         const status = $('#persistence-location-status');
         const loc = state.persistenceLocation || VAR_DIR;
         try {
-            const c = await getJson(`media.cgi?cmd=check&sid=${sid}&file=${encodeURIComponent(loc)}`);
+            const c = await getJson(withSid(`media.cgi?cmd=check&file=${encodeURIComponent(loc)}`));
             if (c.error) { status.textContent = ''; return; }
             if (!c.mounted) {
                 status.innerHTML = `<span style="color:#dc3545">${loc}: kein USB-Stick eingehängt - Mosquitto kann dort nicht speichern.</span>`;
@@ -941,7 +945,7 @@
 
     async function loadMedia() {
         try {
-            const data = await getJson('media.cgi?cmd=list&sid=' + sid);
+            const data = await getJson(withSid('media.cgi?cmd=list'));
             media = data.media || [];
         } catch (e) {
             media = [];
@@ -1025,7 +1029,7 @@
         $('#status').innerHTML = `<span class="status-starting">${label} ...</span>`;
         $('#status-detail').textContent = '';
         try {
-            const result = await get(`service.cgi?cmd=${cmd}&sid=${sid}`);
+            const result = await get(withSid(`service.cgi?cmd=${cmd}`));
             if (/OK/.test(result)) {
                 toast('Kommando ausgeführt');
                 if (cmd === 'restart' || cmd === 'start') $('#apply-bar').classList.add('hidden');
@@ -1074,7 +1078,7 @@
             for (const [key, value] of Object.entries(v)) {
                 table.appendChild(el('tr', {}, [el('td', { text: key }), el('td', {}, [el('code', { text: value })])]));
             }
-            const available = (await get('update_check.cgi?sid=' + sid)).trim();
+            const available = (await get(withSid('update_check.cgi'))).trim();
             if (available !== 'n/a' && isNewer(available, currentVersion)) {
                 availableVersion = available;
                 $('#update-link').innerHTML = `<a href="https://github.com/homematic-community/ccu-addon-mosquitto/releases/latest" target="_blank">Version ${available}</a>`;
@@ -1110,7 +1114,7 @@
             $('#update-error').textContent = s.error || s.message || 'Unbekannter Fehler';
             $('#update-error').classList.remove('hidden');
             $('#update-reload').classList.add('hidden');
-            get('update.cgi?cmd=log&sid=' + sid).then(log => {
+            get(withSid('update.cgi?cmd=log')).then(log => {
                 $('#update-log').textContent = log;
                 $('#update-log').classList.remove('hidden');
             }).catch(() => {});
@@ -1163,7 +1167,7 @@
         $('#update-message').textContent = 'Update wird gestartet ...';
         $('#update-hint').textContent = '';
         try {
-            const s = await getJson('update.cgi?cmd=start&sid=' + sid);
+            const s = await getJson(withSid('update.cgi?cmd=start'));
             if (s.error) { renderUpdate({ phase: 'error', error: s.error }); return; }
             updateTimer = setTimeout(pollUpdate, 1000);
         } catch (e) {
@@ -1173,7 +1177,7 @@
     const closeModal = () => {
         modal.classList.add('hidden');
         clearTimeout(updateTimer);
-        get('update.cgi?cmd=reset&sid=' + sid).catch(() => {});
+        get(withSid('update.cgi?cmd=reset')).catch(() => {});
     };
     $('#update-cancel').addEventListener('click', closeModal);
     $('#update-close').addEventListener('click', closeModal);
@@ -1192,7 +1196,7 @@
 
     $('#log-download').addEventListener('click', () => {
         const a = document.createElement('a');
-        a.href = 'log.cgi?sid=' + sid;
+        a.href = withSid('log.cgi');
         a.download = 'mosquitto.' + new Date().toISOString() + '.log';
         document.body.appendChild(a);
         a.click();
