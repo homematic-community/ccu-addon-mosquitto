@@ -746,6 +746,58 @@ test('D the page opened without ?sid= on openccu-lite: every call rides on the h
     }
 });
 
+test('D no update of its own on openccu-lite: update.cgi defers to the system, the page points to /addons (task 22)', async () => {
+    const sentence = /Updates von Mosquitto kommen auf diesem System von der Seite Addons \(\/addons\)\. On this system, Mosquitto is updated from the Addons page \(\/addons\)\./;
+    lite(true);
+    try {
+        const status = JSON.parse((await c('update.cgi?cmd=status')).text);
+        assert.equal(status.managed, 'system');
+        assert.equal(status.phase, 'idle');
+        assert.match(status.message, sentence);
+        for (const q of ['cmd=start', 'cmd=start&force=1', 'cmd=log', 'cmd=reset', 'cmd=havoc']) {
+            for (const [r, how] of [[await withHeader(`update.cgi?${q}`, LIVE), 'with a live session'], [await c(`update.cgi?${q}`), 'without one']]) {
+                assert.equal(r.status, 403, `${q} ${how}`);
+                assert.equal(JSON.parse(r.text).managed, 'system');
+                assert.match(JSON.parse(r.text).error, sentence);
+            }
+        }
+        assert.equal(sh('test -e /tmp/mosquitto-update/pid').code, 1, 'no update worker was started');
+        // the page: a newer release on GitHub is not offered, the line points to the system
+        put(box, '/tmp/fake-latest.json', JSON.stringify({ tag_name: '9.9.99+0' }));
+        const ctx = await browser.newContext({ extraHTTPHeaders: { 'X-Occulite-Session': LIVE } });
+        const requests = [];
+        ctx.on('request', r => requests.push(r.url()));
+        const litePage = await P.openSettings(ctx, `${U.http}/addons/mosquitto/settings.cgi`);
+        try {
+            await P.until(litePage, () => !document.querySelector('#update-system').classList.contains('hidden'), 'the line about the system');
+            assert.equal(await P.visible(litePage, '#update-notify'), false);
+            assert.equal(await litePage.evaluate(() => [...document.querySelectorAll('#update-system a')].map(a => a.getAttribute('href') + ' ' + a.target).join()), '/addons _top,/addons _top');
+            assert.match(await P.text(litePage, '#addon-version'), /ccu-addon-mosquitto \d/, 'the version is still shown');
+            await P.click(litePage, '#update-start');
+            await litePage.waitForTimeout(300);
+            assert.equal(await P.visible(litePage, '#modal-update'), false, 'no modal');
+            assert.deepEqual(requests.filter(u => /update_check\.cgi/.test(u)), [], 'no GitHub check');
+            assert.deepEqual(litePage.problems, []);
+            coverageEntries.push(await litePage.coverage.stopJSCoverage());
+        } finally {
+            await ctx.close();
+        }
+    } finally {
+        lite(false);
+    }
+    // a CCU: the status names no manager, and the notice comes back for the newer release
+    assert.equal(JSON.parse((await c('update.cgi?cmd=status')).text).managed, undefined);
+    const ccuPage = await P.openSettings(browser, SETTINGS_URL);
+    try {
+        await P.until(ccuPage, () => !document.querySelector('#update-notify').classList.contains('hidden'), 'the update notice on a CCU');
+        assert.equal(await P.visible(ccuPage, '#update-system'), false);
+        coverageEntries.push(await ccuPage.coverage.stopJSCoverage());
+    } finally {
+        await ccuPage.close();
+        put(box, '/tmp/fake-latest.json', JSON.stringify({ tag_name: '0.0.0+0' }));
+    }
+});
+
 // =========================== C: coverage of the page script ===========================
 
 test('C coverage of www/js/script.js in the browser', async () => {

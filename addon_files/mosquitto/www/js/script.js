@@ -1068,6 +1068,11 @@
     let currentVersion = '';
     let availableVersion = '';
 
+    // openccu-lite updates its addons itself (its Addons page): update.cgi's status says so with
+    // managed: 'system', and then this page offers no update of its own and asks GitHub for
+    // nothing (task 22)
+    let systemUpdates = false;
+
     async function checkUpdate() {
         try {
             const v = await getJson('service.cgi?cmd=versions');
@@ -1077,6 +1082,11 @@
             table.innerHTML = '';
             for (const [key, value] of Object.entries(v)) {
                 table.appendChild(el('tr', {}, [el('td', { text: key }), el('td', {}, [el('code', { text: value })])]));
+            }
+            if (systemUpdates) {
+                availableVersion = '';
+                $('#update-notify').classList.add('hidden');
+                return;
             }
             const available = (await get(withSid('update_check.cgi'))).trim();
             if (available !== 'n/a' && isNewer(available, currentVersion)) {
@@ -1155,6 +1165,7 @@
     }
 
     $('#update-start').addEventListener('click', () => {
+        if (systemUpdates) return;
         $('#update-version').textContent = availableVersion;
         $('#update-error').classList.add('hidden');
         $('#update-success').classList.add('hidden');
@@ -1183,14 +1194,21 @@
     $('#update-close').addEventListener('click', closeModal);
     $('#update-reload').addEventListener('click', () => location.reload());
 
-    // an update started earlier (page reloaded meanwhile?) - pick it up
+    // who updates Mosquitto here, then the update check; an update started earlier (page
+    // reloaded meanwhile?) is picked up
     getJson('update.cgi?cmd=status').then(s => {
+        if (s && s.managed === 'system') {
+            systemUpdates = true;
+            $('#update-notify').classList.add('hidden');
+            $('#update-system').classList.remove('hidden');
+            return;
+        }
         if (s && s.phase && !['idle', 'done', 'error'].includes(s.phase)) {
             renderUpdate(s);
             modal.classList.remove('hidden');
             updateTimer = setTimeout(pollUpdate, 1000);
         }
-    }).catch(() => {});
+    }).catch(() => {}).then(checkUpdate);
 
     // --- debug -------------------------------------------------------------------------------
 
@@ -1210,5 +1228,4 @@
         .then(loadMedia)
         .catch(e => { if (e.message !== 'invalid session') toast('Konfiguration konnte nicht geladen werden: ' + e.message, 'danger', 8000); });
     pollStatus();
-    checkUpdate();
 })();

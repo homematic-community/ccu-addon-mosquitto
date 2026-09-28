@@ -113,6 +113,10 @@ installieren_: das Paket wird von GitHub geladen, die Prüfsumme geprüft und wi
 Zusatzsoftware-Seite installiert; Konfiguration und Persistenz bleiben erhalten. Alternativ das
 neue Paket manuell über die Zusatzsoftware-Seite hochladen.
 
+Auf [openccu-lite](#openccu-lite) aktualisiert das System seine Addons selbst, von seiner Seite
+_Addons_: dort zeigt die Konfigurationsseite keinen Update-Hinweis und keine Schaltfläche, sondern
+einen Verweis auf diese Seite, und `update.cgi` lehnt ein Update ab (403).
+
 ## openccu-lite
 
 [openccu-lite](https://github.com/hobbyquaker/openccu-lite) ist eine CCU-Firmware ohne ReGaHSS
@@ -244,5 +248,6 @@ confined user `addon-mosquitto`: the package's manifest (`openccu-lite.json`) as
 The firewall is the system's own, not `libfirewall.tcl`: all four ports the manifest declares, 1883
 and 8883 for MQTT, 1884 and 8884 for the WebSockets, are switches on the system's Addons page
 (_Addon ports_), closed until opened there. The settings page shows no firewall status or button
-there, and updates come from the system's Addons page. See the [openccu-lite section](#openccu-lite) above for the
+there, and updates come from the system's Addons page: the settings page shows a line pointing there
+instead of its own update notice, and `update.cgi` refuses to install (403). See the [openccu-lite section](#openccu-lite) above for the
 details, including what an addon running as its own confined user can and cannot do.

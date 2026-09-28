@@ -47,3 +47,7 @@ test('the runtime block declares the broker ports and nothing it does not need',
 test('the settings page reads the session header, so the system opens it without ?sid= (task 21)', () => {
     assert.equal(manifest.ui.session_header, true);
 });
+
+test('no updater of its own on openccu-lite: the system updates the addon (task 22)', () => {
+    assert.equal(manifest.ui.own_updater, undefined);
+});
