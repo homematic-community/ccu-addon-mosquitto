@@ -38,6 +38,12 @@ test('fresh install: update_script exits 10, links, WebUI button, info', () => {
     assert.match(info, /^Config-Url: \/addons\/mosquitto\/settings.cgi$/m);
 });
 
+test('init answers quietly: the boot and openccu-lite\'s unit call it before start (B-3)', () => {
+    const r = sh(`${RC} init`);
+    assert.equal(r.code, 0, `init exit ${r.code}\n${r.out}`);
+    assert.equal(r.out.trim(), '', 'init prints nothing, no usage line');
+});
+
 test('start: broker answers, runs from /, logs its start', async () => {
     shOk(`${RC} start`);
     await waitForBroker();

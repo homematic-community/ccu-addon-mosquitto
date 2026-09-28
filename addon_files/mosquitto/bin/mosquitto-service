@@ -173,6 +173,12 @@ Status() {
 
 case "$1" in
 
+    init)
+        # Called early at boot, before start: by S55InitAddons on a CCU and OpenCCU, and by
+        # openccu-lite's unit right before start. Nothing to prepare - the broker's directories
+        # are made by start - so it answers quietly instead of with the usage line (B-3).
+    ;;
+
     stop)
         Stop || exit 1
     ;;
@@ -223,7 +229,7 @@ case "$1" in
     ;;
 
     *)
-        echo "Usage: mosquitto {start|stop|restart|reload|status|info|uninstall}" >&2
+        echo "Usage: mosquitto {init|start|stop|restart|reload|status|info|uninstall}" >&2
         exit 1
     ;;
 
