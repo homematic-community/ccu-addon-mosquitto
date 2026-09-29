@@ -1,3 +1,15 @@
+### Neu in 2.1.2+4: openccu-lite
+
+- **openccu-lite: Updates nur noch über die Seite Addons des Systems.** Die Konfigurationsseite zeigt dort keinen
+  eigenen Update-Hinweis und keine Schaltfläche mehr, sondern verweist auf die Seite Addons; `update.cgi` lehnt ein
+  Update mit 403 ab. Auf CCU3 und OpenCCU ändert sich nichts.
+- **openccu-lite: die Konfigurationsseite öffnet ohne `?sid=`.** Seite und CGIs nehmen die Sitzung aus dem Header
+  `X-Occulite-Session` und lassen sie vom System bestätigen; das Manifest meldet `ui.session_header`.
+- **openccu-lite: das Paket bringt sein Manifest mit** (`openccu-lite.json`): das System übernimmt daraus, dass das
+  Addon dauerhaft einen Prozess laufen lässt, und die Ports des Brokers einschließlich der WebSocket-Listener 1884
+  und 8884.
+- **Keine Usage-Zeile mehr im Journal beim Start** (`init` wird still beantwortet).
+
 ### Wichtig: 2.1.2+3 repariert die aarch64-Pakete
 
 **Alle bisherigen aarch64-Pakete (`2.1.2+0`, `2.1.2+1`, `2.1.2+2`) enthalten 32-Bit-ARM-Binaries**
