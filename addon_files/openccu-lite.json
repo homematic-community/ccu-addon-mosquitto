@@ -3,8 +3,8 @@
   "id": "mosquitto",
   "name": "Mosquitto",
   "description": {
-    "de": "Der MQTT-Broker — die Brücke zu Home Assistant, ioBroker und allem anderen.",
-    "en": "The MQTT broker — the bridge to Home Assistant, ioBroker and everything else."
+    "de": "Eclipse Mosquitto ist ein Open-Source-Message-Broker (EPL/EDL-lizenziert), der die MQTT-Protokollversionen 5.0, 3.1.1 und 3.1 implementiert.",
+    "en": "Eclipse Mosquitto is an open source (EPL/EDL licensed) message broker that implements the MQTT protocol versions 5.0, 3.1.1 and 3.1."
   },
   "homepage": "https://github.com/homematic-community/ccu-addon-mosquitto",
   "licence": "EPL-2.0",
