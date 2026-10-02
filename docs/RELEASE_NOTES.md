@@ -1,3 +1,10 @@
+### Neu in 2.1.2+5: Katalogbeschreibung
+
+- **openccu-lite: Katalogbeschreibung aktualisiert** (catalogue description updated). Der Addon-Katalog des Systems
+  beschreibt Mosquitto jetzt mit „Eclipse Mosquitto ist ein Open-Source-Message-Broker (EPL/EDL-lizenziert), der die
+  MQTT-Protokollversionen 5.0, 3.1.1 und 3.1 implementiert.“ Nur die Beschreibung im Manifest hat sich geändert;
+  Mosquitto und das Addon sind dieselben wie in 2.1.2+4.
+
 ### Neu in 2.1.2+4: openccu-lite
 
 - **openccu-lite: Updates nur noch über die Seite Addons des Systems.** Die Konfigurationsseite zeigt dort keinen
