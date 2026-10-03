@@ -5,7 +5,8 @@
 [![ci](https://github.com/homematic-community/ccu-addon-mosquitto/actions/workflows/ci.yml/badge.svg)](https://github.com/homematic-community/ccu-addon-mosquitto/actions/workflows/ci.yml)
 
 Der MQTT-Broker [Mosquitto](https://mosquitto.org/) als Addon für die
-[Homematic CCU3](https://www.homematic-ip.com/produkte/detail/smart-home-zentrale-ccu3.html) und
+[Homematic CCU3](https://www.homematic-ip.com/produkte/detail/smart-home-zentrale-ccu3.html),
+[openccu-lite](https://github.com/hobbyquaker/openccu-lite) und
 [OpenCCU](https://github.com/jens-maus/OpenCCU) (ehemals RaspberryMatic).
 
 <sub>[🇬🇧 English summary below](#english)</sub>
@@ -15,9 +16,9 @@ Der MQTT-Broker [Mosquitto](https://mosquitto.org/) als Addon für die
   `mosquitto_ctrl` und `mosquitto_passwd`.
 * Konfigurationsseite in der CCU-Oberfläche: Listener, Zertifikat, Authentifizierung mit
   Benutzerverwaltung, Logging, Persistenz, Prozesssteuerung, Log-Download und Update per Klick.
-* Läuft auf der CCU3 (armv7l), auf OpenCCU in den 64-bit-ARM- (aarch64) und x86_64-Varianten und
-  auf [openccu-lite](#openccu-lite); die Binaries bringen ihre Laufzeitumgebung (musl, OpenSSL 3)
-  selbst mit.
+* Läuft auf der Homematic CCU3 (armv7l), auf [openccu-lite](#openccu-lite) und auf OpenCCU, dort
+  auch in den 64-bit-ARM- (aarch64) und x86_64-Varianten; die Binaries bringen ihre
+  Laufzeitumgebung (musl, OpenSSL 3) selbst mit.
 * Für jede Mosquitto-Version erscheint automatisch ein Release, siehe [Versionen](#versionen).
 
 ## Installation
@@ -225,7 +226,8 @@ Planung wird außerhalb dieses Repositories gepflegt.
 
 ## English
 
-Mosquitto MQTT broker as an addon for the Homematic CCU3 and OpenCCU (armv7l, aarch64, x86_64).
+Mosquitto MQTT broker as an addon for the Homematic CCU3,
+[openccu-lite](https://github.com/hobbyquaker/openccu-lite) and OpenCCU (armv7l, aarch64, x86_64).
 Upload the package for your platform (see the table above) under _Settings > Control panel >
 Additional software_; on a CCU3 open the listener ports in the firewall afterwards. The
 configuration page (listeners with per-listener anonymous access, TLS certificate, authentication
