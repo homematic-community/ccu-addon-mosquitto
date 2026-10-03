@@ -17,6 +17,7 @@
     "architectures": ["armv7l", "aarch64", "x86_64"]
   },
   "ui": {
+    "icon": "mosquitto/www/mosquitto-icon.png",
     "logo": "mosquitto/www/mosquitto-text-side-28.png",
     "session_header": true
   },
