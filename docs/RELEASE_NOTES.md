@@ -1,3 +1,10 @@
+### Neu in 2.1.2+6: Symbol für openccu-lite
+
+- **openccu-lite: ein Symbol neben dem Logo** (an icon beside the logo). Das Manifest nennt jetzt ein quadratisches
+  Symbol (`www/mosquitto-icon.png`, das Zeichen aus dem Mosquitto-Logo), das das System im Addon-Menü, in der Tab-Leiste
+  und in den Diensten zeigt, statt das breite Logo in ein kleines Quadrat zu drücken. Mosquitto und das Addon sind
+  sonst dieselben wie in 2.1.2+5.
+
 ### Neu in 2.1.2+5: Katalogbeschreibung
 
 - **openccu-lite: Katalogbeschreibung aktualisiert** (catalogue description updated). Der Addon-Katalog des Systems
