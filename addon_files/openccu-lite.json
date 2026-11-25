@@ -32,8 +32,8 @@
       "8884": {"proto": "tcp", "tls": true, "label": {"de": "MQTT über WebSockets mit TLS", "en": "MQTT over WebSockets with TLS"}}
     },
     "note": {
-      "de": "Alle vier Ports sind in der Firewall geschlossen, bis sie auf der Seite Zusatzsoftware (Ports der Zusatzsoftware) geöffnet werden; die TLS-Ports nutzen das Zertifikat des Systems (certs-Gruppe).",
-      "en": "All four ports stay closed in the firewall until opened on the Addons page (Addon ports); the TLS ports use the system's certificate (certs group)."
+      "de": "Der Broker, mit dem sich hm2mqtt, RedMatic und andere MQTT-Clients verbinden. Listener, Zertifikat, Benutzer, Persistenz und Logging stellen Sie auf seiner Konfigurationsseite ein.",
+      "en": "The broker that hm2mqtt, RedMatic and other MQTT clients connect to. Listeners, certificate, users, persistence and logging are set on its configuration page."
     }
   }
 }
